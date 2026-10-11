@@ -460,16 +460,30 @@ func Walk(opts WalkOptions) (*WalkResult, error) {
 		extFilter[strings.ToLower(ext)] = true
 	}
 
+	// Track visited inodes to prevent symlink loops. Shared across all
+	// recursive walkInternal calls so loops are detected at any depth.
+	visited := make(map[uint64]bool)
+
+	return walkInternal(opts, root, ignorePatterns, maxFileSize, extFilter, visited)
+}
+
+// walkInternal performs the actual directory walk with a shared visited map
+// for symlink loop detection across recursive calls.
+func walkInternal(
+	opts WalkOptions,
+	root string,
+	ignorePatterns []string,
+	maxFileSize int64,
+	extFilter map[string]bool,
+	visited map[uint64]bool,
+) (*WalkResult, error) {
 	result := &WalkResult{
 		Stats: WalkStats{
 			ByClass: make(map[ArtifactClass]int),
 		},
 	}
 
-	// Track visited inodes to prevent symlink loops.
-	visited := make(map[uint64]bool)
-
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// If we can't access a path, skip it rather than aborting.
 			result.Skipped = append(result.Skipped, Artifact{
@@ -491,30 +505,20 @@ func Walk(opts WalkOptions) (*WalkResult, error) {
 			return nil
 		}
 
-		// Handle directories.
-		if d.IsDir() {
-			// Handle symlinks to directories.
-			if d.Type()&fs.ModeSymlink != 0 {
-				if !opts.FollowSymlinks {
-					return filepath.SkipDir
-				}
-				// Check for symlink loops.
-				info, err := os.Stat(path)
-				if err != nil {
-					return nil // skip broken symlinks
-				}
-				stat, ok := getInode(info)
-				if ok && visited[stat] {
-					return filepath.SkipDir // loop detected
-				}
-				visited[stat] = true
-			}
-			return nil
-		}
-
-		// Handle symlinked files.
+		// Handle symlinks (to directories or files).
 		if d.Type()&fs.ModeSymlink != 0 {
 			if !opts.FollowSymlinks {
+				// Check if it's a symlink to a directory.
+				info, err := os.Stat(path)
+				if err != nil {
+					return nil // skip broken symlinks silently
+				}
+				if info.IsDir() {
+					// Return nil, NOT SkipDir. SkipDir on a non-directory entry
+					// (symlinks are non-directory for WalkDir) would skip all
+					// remaining siblings in the containing directory.
+					return nil
+				}
 				result.Skipped = append(result.Skipped, Artifact{
 					Path:    rel,
 					AbsPath: path,
@@ -523,6 +527,64 @@ func Walk(opts WalkOptions) (*WalkResult, error) {
 				result.Stats.SkippedFiles++
 				return nil
 			}
+
+			// FollowSymlinks=true: check target type and handle loops.
+			info, err := os.Stat(path)
+			if err != nil {
+				return nil // skip broken symlinks silently
+			}
+			if info.IsDir() {
+				stat, ok := getInode(info)
+				if ok && visited[stat] {
+					return nil // loop detected, skip this entry
+				}
+				if ok {
+					visited[stat] = true
+				}
+
+				// Resolve the real target path so the recursive walk starts at
+				// a real directory, not a symlink. This prevents the symlink
+				// handler from firing again on the root of the sub-walk.
+				realPath, err := filepath.EvalSymlinks(path)
+				if err != nil {
+					return nil // can't resolve, skip
+				}
+
+				// Walk the resolved target with the same visited map.
+				subResult, err := walkInternal(opts, realPath, ignorePatterns, maxFileSize, extFilter, visited)
+				if err != nil {
+					return nil
+				}
+
+				// Adjust paths to be relative to the original root.
+				for i := range subResult.Artifacts {
+					subPath := subResult.Artifacts[i].Path
+					subResult.Artifacts[i].Path = filepath.ToSlash(filepath.Join(rel, subPath))
+					subResult.Artifacts[i].AbsPath = filepath.Join(path, subPath)
+				}
+				for i := range subResult.Skipped {
+					subPath := subResult.Skipped[i].Path
+					subResult.Skipped[i].Path = filepath.ToSlash(filepath.Join(rel, subPath))
+					subResult.Skipped[i].AbsPath = filepath.Join(path, subPath)
+				}
+				result.Artifacts = append(result.Artifacts, subResult.Artifacts...)
+				result.Skipped = append(result.Skipped, subResult.Skipped...)
+				result.Stats.TotalFiles += subResult.Stats.TotalFiles
+				result.Stats.ScannedFiles += subResult.Stats.ScannedFiles
+				result.Stats.SkippedFiles += subResult.Stats.SkippedFiles
+				result.Stats.BinaryFiles += subResult.Stats.BinaryFiles
+				result.Stats.TotalBytes += subResult.Stats.TotalBytes
+				for k, v := range subResult.Stats.ByClass {
+					result.Stats.ByClass[k] += v
+				}
+				return nil
+			}
+			// Symlink to a file with FollowSymlinks=true: fall through to file handling.
+		}
+
+		// Handle regular directories.
+		if d.IsDir() {
+			return nil
 		}
 
 		result.Stats.TotalFiles++
