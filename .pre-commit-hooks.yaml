@@ -1,0 +1,37 @@
+# AegisGate Scanner — Pre-commit Hook
+# ============================================================================
+# This file allows users to integrate AegisGate Scanner into their repositories
+# via the pre-commit framework (https://pre-commit.com).
+#
+# Usage in your repo's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/aegisgatesecurity/aegisgate-scanner
+#       rev: v0.1.0
+#       hooks:
+#         - id: aegisgate-scanner
+#           args: ['--severity', 'high', '--format', 'text']
+#           stages: [pre-commit]
+#
+# Or for local hooks (no network required):
+#
+#   repos:
+#     - repo: local
+#       hooks:
+#         - id: aegisgate-scanner
+#           name: AegisGate Scanner
+#           entry: aegisgate-scanner scan
+#           language: system
+#           pass_filenames: true
+#           args: ['--severity', 'high', '--format', 'text']
+#           stages: [pre-commit]
+# ============================================================================
+
+id: aegisgate-scanner
+name: AegisGate Scanner
+description: Static analysis for AI artifacts — detect prompt injection, PII, secrets, and compliance violations
+entry: aegisgate-scanner scan
+language: system
+files: '\.(md|txt|html|json|jsonl|csv|tsv|yaml|yml|toml|py|ts|js)$'
+pass_filenames: true
+args: ['--severity', 'medium', '--format', 'text']

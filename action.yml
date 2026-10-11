@@ -1,0 +1,91 @@
+# AegisGate Scanner — GitHub Action
+#
+# Static analysis for AI artifacts: detect prompt injection, PII, secrets,
+# and compliance violations in RAG docs, training data, model configs,
+# and agent skills.
+#
+# ---
+#
+# Example workflow:
+#
+#   steps:
+#     - uses: actions/checkout@v4
+#     - uses: aegisgatesecurity/aegisgate-scanner@v0.1.0
+#       with:
+#         path: '.'
+#         format: 'sarif'
+#         severity: 'medium'
+#     - uses: github/codeql-action/upload-sarif@v4
+#       with:
+#         sarif_file: aegisgate-report.sarif
+#
+# ---
+#
+# Optional inputs `no-ml` and `config` are declared below for documentation
+# and future use. Docker action args are static (no conditional support), so
+# the core args (scan, path, format, severity, output) are passed to the CLI.
+# See the README for instructions on using --no-ml and --config directly.
+#
+# The `fail-on-findings` input is handled via the CLI exit code:
+#   - Exit code 1 = findings detected → workflow fails
+#   - Exit code 0 = clean → workflow continues
+# GitHub Actions automatically fails on non-zero exit codes. To ignore
+# findings and continue, set `continue-on-error: true` on the step:
+#
+#   - uses: aegisgatesecurity/aegisgate-scanner@v0.1.0
+#     with:
+#       fail-on-findings: 'false'
+#     continue-on-error: true
+#
+# ---
+#
+# Since Docker actions do not support `runs.using: composite` post-run
+# steps, users must manually upload the SARIF file in their workflow
+# using github/codeql-action/upload-sarif@v4 as shown in the example above.
+# The report is written to `/github/workspace/aegisgate-report.<format>`
+# (e.g., `aegisgate-report.sarif`).
+
+name: 'AegisGate Scanner'
+description: 'Static analysis for AI artifacts — detect prompt injection, PII, secrets, and compliance violations in RAG docs, training data, model configs, and agent skills'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Path to scan'
+    required: false
+    default: '.'
+  format:
+    description: 'Output format (sarif, json, text)'
+    required: false
+    default: 'sarif'
+  severity:
+    description: 'Minimum severity (critical, high, medium, low)'
+    required: false
+    default: 'medium'
+  no-ml:
+    description: 'Disable ML detection (heuristic-only). See README for usage with --no-ml flag.'
+    required: false
+    default: 'false'
+  config:
+    description: 'Path to .aegisgate.yml config file. See README for usage with --config flag.'
+    required: false
+    default: ''
+  fail-on-findings:
+    description: 'Fail the workflow if findings are detected (exit code 1). Set to "false" and use continue-on-error: true to ignore.'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - 'scan'
+    - ${{ inputs.path }}
+    - '--format'
+    - ${{ inputs.format }}
+    - '--severity'
+    - ${{ inputs.severity }}
+    - '--output'
+    - '/github/workspace/aegisgate-report.${{ inputs.format }}'
