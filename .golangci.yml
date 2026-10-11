@@ -1,0 +1,36 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  exclusions:
+    presets:
+      - common-false-positives
+    rules:
+      # defer xxx.Close() — standard Go cleanup pattern, error on
+      # close during deferred cleanup is not actionable.
+      - linters: [errcheck]
+        source: 'defer .+\.Close\(\)'
+      # Close()/Remove()/RemoveAll()/Setenv()/Unsetenv() in test cleanup
+      - linters: [errcheck]
+        path: _test\.go
+        source: '\.(Close|Remove|RemoveAll)\(\)|os\.(Setenv|Unsetenv|Remove|RemoveAll)\('
+      # QF1011: could omit type from variable declaration — explicit type is documentation
+      - linters: [staticcheck]
+        source: 'var _ .+ = '
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - -QF1001
+        - -QF1003
+        - -QF1011
+        - -QF1012
+        - -ST1000
+        - -ST1003
+        - -ST1020

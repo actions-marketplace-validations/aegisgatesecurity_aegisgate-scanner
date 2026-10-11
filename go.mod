@@ -1,0 +1,9 @@
+module github.com/aegisgatesecurity/aegisgate-scanner
+
+go 1.26.9
+
+// Zero external module dependencies (no `require` directives).
+// All third-party code is vendored into internal/ — see NOTICE for details.
+// Runs air-gapped without network connectivity.
+// CGO_ENABLED=1: full neural detection (ONNX Runtime vendored in lib/).
+// CGO_ENABLED=0: heuristic-only fallback (no ONNX, pure Go).

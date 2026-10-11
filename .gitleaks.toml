@@ -1,0 +1,30 @@
+# gitleaks configuration for AegisGate Scanner
+#
+# This file is a deliberate, line-precise allowlist for KNOWN FALSE POSITIVES
+# that gitleaks would otherwise flag. Each allowlist entry documents:
+#   1. The rule being suppressed
+#   2. The exact file and line
+#   3. The reason
+#
+# IMPORTANT: Do NOT add broad allowlists without founder review.
+
+[allowlist]
+  description = "AegisGate Scanner — known false positives"
+  regexes = [
+    # === Canonical fake AWS key in detector patterns ===
+    # Reason: AKIAIOSFODNN7EXAMPLE is the canonical AWS example key from
+    # AWS documentation. It is used in the secret detection patterns as
+    # a known false positive that should NOT trigger an alert.
+    '''AKIAIOSFODNN7EXAMPLE''',
+    # === Canonical fake GitHub token in detector tests ===
+    # Reason: ghp_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJ is a
+    # canonical test fixture used to test the secret scanner.
+    '''ghp_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJ''',
+  ]
+  paths = [
+    # Detector files contain canonical fake tokens for pattern definitions
+    '''(^|/)internal/detectors/secrets\.go$''',
+    # gitleaks config itself contains the fake token string in allowlist
+    '''(^|/)\.gitleaks\.toml$''',
+  ]
+  stopwords = []

@@ -1,0 +1,57 @@
+# dockerignore for AegisGate Scanner
+# Excludes non-essential files from Docker build context
+
+.git
+.github
+.githooks
+.plans
+.workingdirectory
+*HANDOFF*
+*NEXT-SESSION*
+*SESSION-NOTES*
+
+# Documentation (not needed in runtime image)
+*.md
+!NOTICE
+!LICENSE
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.test
+*.prof
+coverage*.out
+coverage*.html
+
+# Secrets / credentials
+*.pem
+*.key
+*.p12
+*.pfx
+.env
+.env.*
+*.secret
+
+# Test artifacts
+/tmp/
+
+# Go vendor (we vendor into internal/, not vendor/)
+vendor/
+
+# Strategic documents
+STRATEGY-MARKET-ANALYSIS.md
+TECHNICAL-GAPS-CORRECTED.md
+95-PERCENT-NEEDS.md
+GOTCHAS*
+TODO*
