@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — v0.3.0-dev: Detection Depth + Performance
+### Added — v0.3.0: Detection Depth + Performance Sprint
 
 - **Entropy-based secret detection** — Shannon entropy analysis catches
   unknown secrets that don't match any known regex format. Detects
@@ -49,6 +49,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   due to stderr pipe buffer deadlock. Config validation error messages
   now truncate long values to 100 chars. Test now reads stderr in
   goroutine to prevent pipe deadlock.
+
+### Performance — v0.3.0: Large File Scanning Optimization
+
+- **Line-by-line keyword pre-filtering** — for files > 64KB, text is split
+  into lines and processed in parallel. Each regex pattern has literal
+  keywords extracted at compile time. Only patterns whose keywords appear
+  on a given line are run against that line. 222 of 276 patterns have
+  keywords; the remaining 54 (mostly PII patterns) scan full text in
+  parallel. All patterns are single-line (no `(?s)` dotall) — lossless.
+  Result: 12x faster scanning on 10MB files (227s → 18.3s).
+- **O(log n) line/column lookup** — `byteOffsetToLineCol` was O(n) per
+  match (scanning from byte 0 each time), consuming 38% of CPU on large
+  files. Replaced with precomputed newline position table + binary search.
+
+### Test Infrastructure — v0.3.0
+
+- **Data race fix** — `bytes.Buffer` concurrent read/write in pentest
+  tests (StdinHuge, OutputFormatFuzz) fixed with `sync.WaitGroup`.
+- **Performance threshold guards** — time assertions now skip under
+  `-short` flag (race detector adds 10-20x overhead).
+- **Stress test gating** — 10MB, 1MB, self-scan, and high-density tests
+  skip under `-short`. 50MB/100MB tests require `AEGISGATE_LONG_TESTS=1`.
+- **ReDoS test timeout scaling** — 5s normal, 30s under `-short`.
 
 ### Added — Solo Maintainer ROI Features (v0.2.0-dev)
 - **JSONL output format** (`--format jsonl`) — NDJSON with one finding per line
