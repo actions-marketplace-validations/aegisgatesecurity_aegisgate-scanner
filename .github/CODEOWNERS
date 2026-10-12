@@ -1,0 +1,27 @@
+# AegisGate Scanner — Code Owners
+# ============================================================================
+# All code is owned by AegisGate Security. Contact: security@aegisgatesecurity.io
+# ============================================================================
+
+# Default owner for everything
+* @jcolvin1056
+
+# Detection engine (security-critical)
+internal/detectors/       @jcolvin1056
+
+# ML detection internals (security-critical)
+internal/ml/              @jcolvin1056
+
+# ONNX Runtime bindings (vendored, security-critical)
+internal/onnxruntime_go/  @jcolvin1056
+
+# Text normalization (vendored)
+internal/textnorm/        @jcolvin1056
+
+# Binary artifacts (supply chain)
+lib/                      @jcolvin1056
+models/                   @jcolvin1056
+
+# Scanner core (security-critical)
+pkg/scanner/              @jcolvin1056
+pkg/artifacts/            @jcolvin1056
