@@ -5,9 +5,9 @@
 //
 // Walks directory trees and classifies files into AI artifact categories:
 //   - RAG documents (.txt, .md, .rst, .html, .json, .jsonl, .csv, .xml)
-//   - Training datasets (.jsonl, .csv, .json, .tsv)
-//   - Model configs (.yaml, .yml, .json, .toml)
-//   - Agent skills (.json, .yaml, .yml, .py, .ts, .js)
+//   - Training datasets (.jsonl, .csv, .json, .tsv, .ipynb)
+//   - Model configs (.yaml, .yml, .json, .toml, .env, .env.*)
+//   - Agent skills (.json, .yaml, .yml, .py, .ts, .js, .ipynb)
 //
 // Features:
 //   - Extension-based classification with path-context disambiguation
@@ -157,6 +157,8 @@ var supportedExtensions = map[string][]ArtifactClass{
 	".tar.gz":  {ClassGeneric},
 	".tar.bz2": {ClassGeneric},
 	".tbz2":    {ClassGeneric},
+	".ipynb":   {ClassTrainingData, ClassAgentSkill},
+	".env":     {ClassModelConfig},
 }
 
 // pathContextKeywords maps path substrings to artifact classes for
@@ -186,6 +188,13 @@ const binaryCheckBytes = 512
 func ClassifyFile(path string) ArtifactClass {
 	ext := strings.ToLower(filepath.Ext(path))
 
+	// Special case: .env, .env.local, .env.production, etc.
+	// These are always model/config files regardless of extension.
+	base := strings.ToLower(filepath.Base(path))
+	if base == ".env" || strings.HasPrefix(base, ".env.") {
+		return ClassModelConfig
+	}
+
 	classes, ok := supportedExtensions[ext]
 	if !ok {
 		return ClassGeneric
@@ -211,11 +220,22 @@ func ClassifyFile(path string) ArtifactClass {
 }
 
 // IsSupportedExtension returns true if the file extension is in the
-// supported set for AI artifact scanning.
+// supported set for AI artifact scanning. Also returns true for .env.*
+// variant files (.env.local, .env.production, .env.development) which
+// are common secret-bearing files in AI/ML projects.
 func IsSupportedExtension(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
-	_, ok := supportedExtensions[ext]
-	return ok
+	if _, ok := supportedExtensions[ext]; ok {
+		return true
+	}
+	// Special case: .env.local, .env.production, .env.development, etc.
+	// These have extensions like .local, .production — not .env — but
+	// are security-critical config files that must be scanned.
+	base := strings.ToLower(filepath.Base(path))
+	if base == ".env" || strings.HasPrefix(base, ".env.") {
+		return true
+	}
+	return false
 }
 
 // SupportedExtensions returns all supported file extensions.
@@ -398,7 +418,6 @@ var defaultIgnorePaths = []string{
 	".venv",
 	"venv",
 	"env",
-	".env",
 	".idea",
 	".vscode",
 	".DS_Store",

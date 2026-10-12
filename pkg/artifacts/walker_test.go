@@ -1891,8 +1891,8 @@ func TestWalk_SymlinkDirNotFollowed(t *testing.T) {
 func TestWalk_HTMLEscapesIgnore(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create a file with .env directory name (in default ignores).
-	writeFile(t, filepath.Join(dir, ".env", "config.json"), `{"k":"v"}`)
+	// Create a file in a .idea directory (in default ignores).
+	writeFile(t, filepath.Join(dir, ".idea", "config.json"), `{"k":"v"}`)
 	writeFile(t, filepath.Join(dir, "keep.md"), "keep\n")
 
 	result, err := Walk(WalkOptions{Root: dir})
@@ -1900,11 +1900,65 @@ func TestWalk_HTMLEscapesIgnore(t *testing.T) {
 		t.Fatalf("Walk() error: %v", err)
 	}
 
-	if containsArtifact(result.Artifacts, ".env/config.json") {
-		t.Errorf(".env/config.json should be ignored by default")
+	if containsArtifact(result.Artifacts, ".idea/config.json") {
+		t.Errorf(".idea/config.json should be ignored by default")
 	}
 	if !containsArtifact(result.Artifacts, "keep.md") {
 		t.Errorf("keep.md should be in artifacts")
+	}
+}
+
+// TestWalk_EnvFileScanned verifies that .env files are NOT ignored —
+// they are the #1 secret exposure vector and must always be scanned.
+func TestWalk_EnvFileScanned(t *testing.T) {
+	dir := t.TempDir()
+
+	// .env file with secrets — must be scanned.
+	writeFile(t, filepath.Join(dir, ".env"), "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, filepath.Join(dir, ".env.local"), "OPENAI_API_KEY=sk-proj-abc123\n")
+	writeFile(t, filepath.Join(dir, ".env.production"), "DATABASE_URL=postgres://user:pass@db:5432\n")
+	writeFile(t, filepath.Join(dir, "keep.md"), "keep\n")
+
+	result, err := Walk(WalkOptions{Root: dir})
+	if err != nil {
+		t.Fatalf("Walk() error: %v", err)
+	}
+
+	if !containsArtifact(result.Artifacts, ".env") {
+		t.Errorf(".env file should be scanned — it is a security-critical config file")
+	}
+	if !containsArtifact(result.Artifacts, ".env.local") {
+		t.Errorf(".env.local file should be scanned — env variant files contain secrets")
+	}
+	if !containsArtifact(result.Artifacts, ".env.production") {
+		t.Errorf(".env.production file should be scanned — env variant files contain secrets")
+	}
+	if !containsArtifact(result.Artifacts, "keep.md") {
+		t.Errorf("keep.md should be in artifacts")
+	}
+}
+
+// TestWalk_IpynbScanned verifies that Jupyter notebooks are scanned.
+func TestWalk_IpynbScanned(t *testing.T) {
+	dir := t.TempDir()
+
+	// .ipynb file — Jupyter notebook, common AI developer artifact.
+	writeFile(t, filepath.Join(dir, "analysis.ipynb"),
+		`{"cells":[{"cell_type":"code","source":["import os; os.system('rm -rf /')"]}]}`)
+
+	result, err := Walk(WalkOptions{Root: dir})
+	if err != nil {
+		t.Fatalf("Walk() error: %v", err)
+	}
+
+	if !containsArtifact(result.Artifacts, "analysis.ipynb") {
+		t.Errorf("analysis.ipynb should be scanned — Jupyter notebooks are AI artifacts")
+	}
+
+	// Verify classification — notebook with code should be agent-skill or training-data.
+	art := findArtifact(result.Artifacts, "analysis.ipynb")
+	if art != nil && art.Class == ClassGeneric {
+		t.Errorf("analysis.ipynb should not be ClassGeneric — should be TrainingData or AgentSkill")
 	}
 }
 
