@@ -1,0 +1,86 @@
+# AegisGate Scanner Configuration
+# https://github.com/aegisgate-security/aegisgate-scanner
+#
+# This is the default configuration for the AegisGate Scanner repository
+# itself. It serves as both a working config and an example for users.
+#
+# Place a copy of this file in your project root as .aegisgate.yml
+
+# Paths to ignore (glob patterns)
+# These are in addition to the scanner's built-in defaults (.git, node_modules,
+# vendor, dist, build).
+ignore_paths:
+  - "*.git*"
+  - "node_modules"
+  - "vendor"
+  - "dist"
+  - "build"
+  - "internal/onnxruntime_go"
+  - "internal/textnorm"
+  - "models"
+  - "lib"
+  - "*.test"
+  - "*.out"
+  - "*.prof"
+
+# File extensions to scan (empty = all supported)
+# Supported: .csv, .htm, .html, .js, .json, .jsonl, .md, .py, .rst,
+#            .toml, .ts, .tsv, .txt, .xml, .yaml, .yml
+extensions: []
+
+# Maximum file size to scan (bytes, default 10MB)
+max_file_size: 10485760
+
+# Follow symbolic links (default false for security)
+follow_symlinks: false
+
+# Respect .gitignore files (default true)
+respect_gitignore: true
+
+# Minimum severity to report (critical, high, medium, low)
+min_severity: low
+
+# Enable ML threat detection (requires CGO build with ONNX Runtime)
+# Set to false for lite/regex-only builds
+enable_ml: true
+
+# ML detection threshold (0.0-1.0, default 0.50)
+# Lower = more sensitive (more false positives)
+# Higher = more conservative (may miss subtle threats)
+ml_threshold: 0.50
+
+# Maximum findings per file (0 = unlimited)
+max_findings_per_file: 0
+
+# Output format: sarif, json, text
+output_format: text
+
+# Color output (text format only)
+color_output: true
+
+# Path to ONNX model file (empty = use bundled default)
+model_path: ""
+
+# Fail-on severity: exit non-zero only for findings at or above this level
+# Options: critical, high, medium, low
+# Default: low (any finding causes exit 1)
+fail_on_severity: low
+
+# Disable specific detection rules (by rule ID)
+# Example: ["pii_ssn", "secret_aws_key"]
+disable_rules: []
+
+# Custom rules (user-defined regex patterns)
+# Pattern syntax: Go RE2 regex (https://github.com/google/re2/wiki/Syntax)
+# Note: Use [0-9] instead of \d (the YAML parser does not unescape \d)
+# custom_rules:
+#   - name: custom_internal_api_key
+#     pattern: "INTERNAL-API-[a-zA-Z0-9]{32}"
+#     severity: high
+#     category: custom
+#     description: Internal API key pattern
+
+# Baseline suppression file (path to JSON file with accepted findings)
+# Generate with: aegisgate-scanner scan . --generate-baseline baseline.json
+# Apply with: aegisgate-scanner scan . --baseline baseline.json
+baseline_path: ""

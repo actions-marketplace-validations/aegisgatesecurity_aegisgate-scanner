@@ -136,22 +136,27 @@ type WalkStats struct {
 // supportedExtensions maps file extensions to their primary artifact class.
 // Extensions that can map to multiple classes are resolved by path context.
 var supportedExtensions = map[string][]ArtifactClass{
-	".txt":   {ClassRAGDocument},
-	".md":    {ClassRAGDocument},
-	".rst":   {ClassRAGDocument},
-	".html":  {ClassRAGDocument},
-	".htm":   {ClassRAGDocument},
-	".xml":   {ClassRAGDocument},
-	".json":  {ClassRAGDocument, ClassTrainingData, ClassModelConfig, ClassAgentSkill},
-	".jsonl": {ClassRAGDocument, ClassTrainingData},
-	".csv":   {ClassRAGDocument, ClassTrainingData},
-	".tsv":   {ClassTrainingData},
-	".yaml":  {ClassModelConfig, ClassAgentSkill},
-	".yml":   {ClassModelConfig, ClassAgentSkill},
-	".toml":  {ClassModelConfig},
-	".py":    {ClassAgentSkill},
-	".ts":    {ClassAgentSkill},
-	".js":    {ClassAgentSkill},
+	".txt":     {ClassRAGDocument},
+	".md":      {ClassRAGDocument},
+	".rst":     {ClassRAGDocument},
+	".html":    {ClassRAGDocument},
+	".htm":     {ClassRAGDocument},
+	".xml":     {ClassRAGDocument},
+	".json":    {ClassRAGDocument, ClassTrainingData, ClassModelConfig, ClassAgentSkill},
+	".jsonl":   {ClassRAGDocument, ClassTrainingData},
+	".csv":     {ClassRAGDocument, ClassTrainingData},
+	".tsv":     {ClassTrainingData},
+	".yaml":    {ClassModelConfig, ClassAgentSkill},
+	".yml":     {ClassModelConfig, ClassAgentSkill},
+	".toml":    {ClassModelConfig},
+	".py":      {ClassAgentSkill},
+	".ts":      {ClassAgentSkill},
+	".js":      {ClassAgentSkill},
+	".zip":     {ClassGeneric},
+	".tgz":     {ClassGeneric},
+	".tar.gz":  {ClassGeneric},
+	".tar.bz2": {ClassGeneric},
+	".tbz2":    {ClassGeneric},
 }
 
 // pathContextKeywords maps path substrings to artifact classes for
@@ -417,12 +422,6 @@ var defaultIgnorePaths = []string{
 	"*.ico",
 	"*.svg",
 	"*.pdf",
-	"*.zip",
-	"*.tar",
-	"*.gz",
-	"*.bz2",
-	"*.7z",
-	"*.rar",
 	"*.parquet",
 	"*.feather",
 	"*.onnx",
@@ -652,6 +651,24 @@ func walkInternal(
 		}
 
 		// Check for binary content.
+		// Archive files are binary but should not be skipped — they may
+		// be extracted later if archive extraction is enabled.
+		if IsArchive(path) {
+			// Archives are included as artifacts without reading content.
+			art := Artifact{
+				Path:    rel,
+				AbsPath: path,
+				Class:   ClassGeneric,
+				Size:    info.Size(),
+				Binary:  true,
+			}
+			result.Artifacts = append(result.Artifacts, art)
+			result.Stats.TotalFiles++
+			result.Stats.ScannedFiles++
+			result.Stats.ByClass[ClassGeneric]++
+			return nil
+		}
+
 		binary, err := isBinary(path)
 		if err != nil {
 			result.Skipped = append(result.Skipped, Artifact{

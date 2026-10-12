@@ -1464,12 +1464,11 @@ func TestWalk_DefaultIgnoreGlobPatterns(t *testing.T) {
 		t.Fatalf("Walk() error: %v", err)
 	}
 
-	// Only doc.md should be in artifacts.
-	if len(result.Artifacts) != 1 {
-		t.Fatalf("Walk() got %d artifacts, want 1", len(result.Artifacts))
-	}
-	if result.Artifacts[0].Path != "doc.md" {
-		t.Errorf("artifact path = %q, want doc.md", result.Artifacts[0].Path)
+	// doc.md should be in artifacts; archive.zip is now included as
+	// a generic artifact for archive extraction support.
+	// image.png and model.pt are still ignored by default ignore patterns.
+	if len(result.Artifacts) != 2 {
+		t.Fatalf("Walk() got %d artifacts, want 2", len(result.Artifacts))
 	}
 }
 
@@ -2104,8 +2103,13 @@ func TestWalk_ArchiveExtensionsIgnored(t *testing.T) {
 		t.Fatalf("Walk() error: %v", err)
 	}
 
-	if len(result.Artifacts) != 1 {
-		t.Errorf("Walk() got %d artifacts, want 1 (archive files ignored)", len(result.Artifacts))
+	// data.zip is now included as a ClassGeneric artifact for archive
+	// extraction support. keep.md is a supported text artifact.
+	// Other archive formats (.tar, .gz, .bz2, .7z, .rar) are not in
+	// supportedExtensions and are silently skipped.
+	// .parquet and .feather are still in defaultIgnorePaths.
+	if len(result.Artifacts) != 2 {
+		t.Errorf("Walk() got %d artifacts, want 2 (data.zip + keep.md)", len(result.Artifacts))
 	}
 }
 

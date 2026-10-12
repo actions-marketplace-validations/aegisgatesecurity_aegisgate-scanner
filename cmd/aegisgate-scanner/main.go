@@ -44,6 +44,7 @@ import (
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/baseline"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/config"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/output"
+	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/plugins"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/scanner"
 )
 
@@ -81,6 +82,8 @@ func run(argv []string) int {
 	case "version":
 		printVersion()
 		return exitOK
+	case "update":
+		return runUpdate(args)
 	case "help", "--help", "-h":
 		printUsage()
 		return exitOK
@@ -144,11 +147,95 @@ func runScan(args []string) int {
 		}
 	}
 
+	// Load and register plugins from .aegisgate-plugins/ directory.
+	loadedPlugins, err := plugins.LoadPluginsFromDirWithDefault(absRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to load plugins: %v\n", err)
+	} else if len(loadedPlugins) > 0 {
+		if err := plugins.RegisterPluginsWithDetector(loadedPlugins); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to register plugins: %v\n", err)
+		} else if opts.verbose {
+			totalRules := 0
+			for _, p := range loadedPlugins {
+				totalRules += len(p.Rules())
+			}
+			fmt.Fprintf(os.Stderr, "Loaded %d plugins with %d rules\n", len(loadedPlugins), totalRules)
+		}
+	}
+
 	// Walk files.
 	walkResult, err := artifacts.Walk(cfg.ToWalkOptions(absRoot))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: file walk failed: %v\n", err)
 		return exitError
+	}
+
+	// Apply diff scanning: filter to only changed files.
+	if opts.diffBase != "" {
+		changedFiles, err := scanner.GetChangedFiles(opts.diffBase, absRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: git diff failed: %v\n", err)
+			return exitError
+		}
+		if opts.verbose {
+			fmt.Fprintf(os.Stderr, "Diff scan: %d changed files vs %s\n", len(changedFiles), opts.diffBase)
+		}
+
+		// Filter artifacts to only changed files.
+		var filteredArts []artifacts.Artifact
+		changedSet := make(map[string]bool)
+		for _, f := range changedFiles {
+			changedSet[f] = true
+		}
+		for _, art := range walkResult.Artifacts {
+			if changedSet[art.Path] {
+				filteredArts = append(filteredArts, art)
+			}
+		}
+		walkResult.Artifacts = filteredArts
+	}
+
+	// Apply archive extraction: extract archives and add extracted files.
+	if opts.extractArchives {
+		var newArts []artifacts.Artifact
+		for _, art := range walkResult.Artifacts {
+			if artifacts.IsArchive(art.AbsPath) {
+				extResult, err := artifacts.ExtractArchive(art.AbsPath)
+				if err != nil {
+					if opts.verbose {
+						fmt.Fprintf(os.Stderr, "Warning: failed to extract %s: %v\n", art.Path, err)
+					}
+					newArts = append(newArts, art)
+					continue
+				}
+				defer extResult.Cleanup()
+
+				// Walk extracted directory.
+				extWalkOpts := cfg.ToWalkOptions(extResult.Dir)
+				extWalkOpts.RespectGitIgnore = false
+				extWalkResult, err := artifacts.Walk(extWalkOpts)
+				if err != nil {
+					if opts.verbose {
+						fmt.Fprintf(os.Stderr, "Warning: failed to walk extracted %s: %v\n", art.Path, err)
+					}
+					newArts = append(newArts, art)
+					continue
+				}
+
+				// Adjust paths to be relative to original archive.
+				for i := range extWalkResult.Artifacts {
+					extWalkResult.Artifacts[i].Path = art.Path + "!" + extWalkResult.Artifacts[i].Path
+				}
+				newArts = append(newArts, extWalkResult.Artifacts...)
+
+				if opts.verbose {
+					fmt.Fprintf(os.Stderr, "Extracted %d files from %s\n", len(extWalkResult.Artifacts), art.Path)
+				}
+			} else {
+				newArts = append(newArts, art)
+			}
+		}
+		walkResult.Artifacts = newArts
 	}
 
 	// Skip if no artifacts found.
@@ -361,6 +448,8 @@ type scanArgs struct {
 	failOn           string
 	disableRules     []string
 	stdinExt         string
+	diffBase         string
+	extractArchives  bool
 }
 
 func parseScanArgs(args []string) (*scanArgs, error) {
@@ -473,6 +562,22 @@ func parseScanArgs(args []string) (*scanArgs, error) {
 		case strings.HasPrefix(arg, "--stdin-ext="):
 			opts.stdinExt = strings.TrimPrefix(arg, "--stdin-ext=")
 
+		case arg == "--diff":
+			i++
+			if i >= len(args) {
+				return nil, fmt.Errorf("--diff requires a value")
+			}
+			opts.diffBase = args[i]
+
+		case strings.HasPrefix(arg, "--diff="):
+			opts.diffBase = strings.TrimPrefix(arg, "--diff=")
+
+		case arg == "--extract-archives":
+			opts.extractArchives = true
+
+		case arg == "--no-extract-archives":
+			opts.extractArchives = false
+
 		case strings.HasPrefix(arg, "--format="):
 			opts.format = strings.TrimPrefix(arg, "--format=")
 
@@ -558,6 +663,30 @@ func outputResults(result *scanner.ScanResult, root string, cfg *config.Config, 
 		data, err = output.FormatJSON(result, root, Version)
 		if err != nil {
 			return fmt.Errorf("JSON output: %w", err)
+		}
+
+	case "html":
+		data, err = output.FormatHTML(result, root, Version)
+		if err != nil {
+			return fmt.Errorf("HTML output: %w", err)
+		}
+
+	case "pr-comment":
+		data, err = output.FormatPRComment(result, root, Version)
+		if err != nil {
+			return fmt.Errorf("PR comment output: %w", err)
+		}
+
+	case "github-actions":
+		data, err = output.FormatGitHubActions(result, root, Version)
+		if err != nil {
+			return fmt.Errorf("GitHub Actions output: %w", err)
+		}
+
+	case "sbom":
+		data, err = output.FormatSBOM(result, root, Version)
+		if err != nil {
+			return fmt.Errorf("SBOM output: %w", err)
 		}
 
 	case "text":
@@ -783,10 +912,12 @@ Commands:
   scan [path]    Scan a directory for security threats in AI artifacts
   init [dir]     Create a .aegisgate.yml configuration file
   version        Print version information
+  update         Check for and install updates
   help           Show this help message
 
 Scan Options:
-  --format, -f <format>    Output format: sarif, json, text (default: text)
+  --format, -f <format>    Output format: sarif, json, text, html, pr-comment,
+                           github-actions, sbom (default: text)
   --output, -o <file>      Write output to file instead of stdout
   --severity, -s <level>   Minimum severity: critical, high, medium, low
   --no-ml                  Disable ML threat detection (regex-only)
@@ -799,6 +930,9 @@ Scan Options:
   --fail-on <level>        Exit non-zero only for findings at/above level
   --disable-rule <id>      Disable specific detection rule (repeatable)
   --stdin-ext <ext>        File extension for stdin classification (default: .txt)
+  --diff <base_branch>     Only scan files changed vs base branch
+  --extract-archives       Extract archives before scanning (default: true)
+  --no-extract-archives    Disable archive extraction
 
 Stdin/Pipe Support:
   cat file.json | aegisgate-scanner scan - --stdin-ext .json
