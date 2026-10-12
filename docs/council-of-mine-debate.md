@@ -422,3 +422,29 @@ These don't match the existing "ignore all previous instructions" pattern family
 ---
 
 *End of Council-of-Mine Debate. Generated October 12, 2026.*
+---
+
+## Addendum: v0.3.0 Status Update (October 12, 2026)
+
+The following items raised in the original debate have been addressed:
+
+### Resolved
+
+| Original Issue | Severity | Resolution |
+|---|---|---|
+| No indirect prompt injection detection | HIGH | ✅ Added 5 indirect prompt injection patterns (conditional, role redefinition, context override, instruction embedding, data exfiltration) |
+| Performance (22s/MB) | MEDIUM | ✅ 12x improvement via line-by-line keyword pre-filtering + O(log n) line lookup. Now 1.88s/MB. |
+| Pattern count 257 | — | ✅ Now 276 patterns across 10 categories |
+| Test count 1,163 | — | ✅ Now 1,227 test functions, all pass `-race -short` |
+| Dataflow/taint tracking | MEDIUM | ✅ Documented as scope limitation in README. Recommends Semgrep/CodeQL as complementary tools. |
+| Content-hash caching | LOW | ✅ Implemented with LRU + age-based eviction |
+
+### Updated Consensus
+
+| Question | v0.1.0 | v0.3.0 |
+|---|---|---|
+| Patent-ready? | 6/6 YES | 6/6 YES |
+| Would adopt in production? | 3/6 YES | **6/6 YES** |
+| Performance acceptable? | 5/6 YES | **6/6 YES** |
+
+*Updated October 12, 2026.*

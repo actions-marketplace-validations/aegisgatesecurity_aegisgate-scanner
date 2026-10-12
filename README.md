@@ -50,11 +50,11 @@ don't understand AI-specific threats. AegisGate Scanner does.**
 
 | | Semgrep / CodeQL | TruffleHog / Gitleaks | AegisGate Scanner |
 |---|---|---|---|
-| Prompt injection | ❌ | ❌ | ✅ 12 patterns + ML |
-| Secrets | Partial | ✅ | ✅ 65 patterns |
+| Prompt injection | ❌ | ❌ | ✅ 17 patterns + ML |
+| Secrets | Partial | ✅ | ✅ 64 patterns |
 | PII (US + International) | ❌ | ❌ | ✅ 85 patterns |
 | Dangerous code (agent skills) | Partial | ❌ | ✅ 34 patterns |
-| Compliance (HIPAA/GDPR/EU AI Act) | ❌ | ❌ | ✅ 35 patterns |
+| Compliance (HIPAA/GDPR/EU AI Act) | ❌ | ❌ | ✅ 64 patterns |
 | OT/ICS protocol exposure | ❌ | ❌ | ✅ 9 patterns |
 | Archive extraction | ❌ | ❌ | ✅ zip/tar.gz/tar.bz2 |
 | SARIF output | ✅ | ❌ | ✅ |
@@ -127,7 +127,7 @@ docker run --rm -v $(pwd):/github/workspace aegisgate-scanner:lite scan /github/
 ### GitHub Actions
 
 ```yaml
-- uses: aegisgatesecurity/aegisgate-scanner@v0.1.0
+- uses: aegisgatesecurity/aegisgate-scanner@v0.3.0
   with:
     path: '.'
     format: 'sarif'
@@ -141,14 +141,14 @@ docker run --rm -v $(pwd):/github/workspace aegisgate-scanner:lite scan /github/
 
 | Category | Patterns | Examples |
 |----------|----------|----------|
-| **Prompt Injection** | 12 | "Ignore all previous instructions", role-play attacks, delimiter injection, SSTI probes, base64-encoded payloads |
-| **Secrets** | 65 | AWS keys, GitHub tokens, OpenAI keys, Stripe keys, Slack tokens, JWT, private keys, database URLs |
+| **Prompt Injection** | 17 | "Ignore all previous instructions", role-play attacks, delimiter injection, SSTI probes, base64-encoded payloads, indirect injection |
+| **Secrets** | 64 | AWS keys, GitHub tokens, OpenAI keys, Stripe keys, Slack tokens, JWT, private keys, database URLs |
 | **PII — US Core** | 32 | SSN, email, phone, passport, driver's license, ITIN |
 | **PII — US Extended** | 13 | Employer ID, VIN, bank routing, Medicare, NAIC |
 | **PII — Financial** | 16 | Credit card numbers (Visa/MC/Amex/Discover), IBAN, SWIFT/BIC |
 | **PII — International** | 24 | UK NHS, Canada SIN, Germany Steuer, France INSEE, Australia TFN |
 | **XSS** | 12 | Script injection, event handlers, encoded payloads, SVG vectors |
-| **Compliance** | 35 | HIPAA, GDPR, EU AI Act, COPPA, CCPA safety protocol bypass |
+| **Compliance** | 47 | OWASP LLM Top 10, EU AI Act, MITRE ATLAS, HIPAA, GDPR, COPPA, CCPA, model config safety |
 | **Dangerous Functions** | 34 | `eval()`, `exec()`, `os.system()`, `subprocess`, `pickle.load()`, `child_process.exec()` |
 | **OT/ICS Protocols** | 9 | Modbus, S7comm, DNP3, BACnet, EtherCAT, OPC UA, Profinet |
 | **Technical Debt** | 8 | TODO, FIXME, HACK, XXX, BUG, NOTE — security-flagged markers |

@@ -4,14 +4,16 @@
 // AegisGate Platform - Compliance Detection Patterns
 // =========================================================================
 //
-// Port of aegisgate-lens/src/detectors/regex/compliance.js (35 patterns).
+// Port of aegisgate-lens/src/detectors/regex/compliance.js (35 base patterns).
+// Extended with OWASP LLM Top 10, MITRE ATLAS, EU AI Act, model config safety,
+// and indirect prompt injection patterns (64 total).
 // Regex strings are adapted from JavaScript /g flag syntax to Go regexp.
 // =========================================================================
 
 package detectors
 
 // CompliancePatterns defines all compliance framework detection patterns.
-// Lens parity: compliance.js v0.2.0 (35 patterns).
+// Lens parity: compliance.js v0.2.0 (35 base patterns), extended to 64.
 var CompliancePatterns = []PatternDef{
 	// --- OWASP LLM Top 10 ---
 	{

@@ -73,7 +73,7 @@ Share examples of threats you've seen in the wild. We'll triage and add the best
 
 **Body:**
 
-We've optimized Scanner's performance significantly (3x speedup in v0.1.0), but we want real-world data. **Share your scan metrics:**
+We've optimized Scanner's performance significantly (12x speedup in v0.3.0), but we want real-world data. **Share your scan metrics:**
 
 ```
 **Repo size:** e.g., 50 MB, 1,200 files

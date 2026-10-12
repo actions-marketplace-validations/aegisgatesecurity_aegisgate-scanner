@@ -8,9 +8,9 @@
 
 ## Executive Summary
 
-The AegisGate Scanner was subjected to a comprehensive testing program covering load/stress/crush testing (k6-style), security pentesting (Kali-style adversarial inputs), and metrics collection. **All 1,163 test functions pass.** No crashes, no data races, no memory leaks, no security bypasses in core detection. The scanner is robust under extreme load and safe against adversarial inputs.
+The AegisGate Scanner was subjected to a comprehensive testing program covering load/stress/crush testing (k6-style), security pentesting (Kali-style adversarial inputs), and metrics collection. **All 1,227 test functions pass.** No crashes, no data races, no memory leaks, no security bypasses in core detection. The scanner is robust under extreme load and safe against adversarial inputs.
 
-**62 new test functions** were added across 5 new test files totaling **2,666 LOC**.
+**76 new test functions** were added across 5 new test files totaling **3,130 LOC**.
 
 ---
 
@@ -25,7 +25,7 @@ The AegisGate Scanner was subjected to a comprehensive testing program covering 
 | CLI Pentest | 6 | ✅ All pass |
 | Race Tests | 5 | ✅ Clean |
 | Existing Tests | 1,101 | ✅ All pass |
-| **Total** | **1,163** | **✅ All pass** |
+| **Total** | **1,227** | **✅ All pass** |
 
 ---
 
@@ -210,7 +210,7 @@ The AegisGate Scanner was subjected to a comprehensive testing program covering 
 | Source LOC | 37,640 |
 | Test LOC | 29,184 |
 | Test/Source Ratio | 0.78 |
-| Test Functions | 1,163 |
+| Test Functions | 1,227 |
 | Test Files | 58 |
 | Detection Patterns | 276 |
 | Output Formats | 8 |

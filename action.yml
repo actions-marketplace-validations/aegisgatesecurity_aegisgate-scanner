@@ -10,7 +10,7 @@
 #
 #   steps:
 #     - uses: actions/checkout@v4
-#     - uses: aegisgatesecurity/aegisgate-scanner@v0.1.0
+#     - uses: aegisgatesecurity/aegisgate-scanner@v0.3.0
 #       with:
 #         path: '.'
 #         format: 'sarif'
@@ -27,7 +27,7 @@
 # GitHub Actions automatically fails on non-zero exit codes. To ignore
 # findings and continue, set `continue-on-error: true` on the step:
 #
-#   - uses: aegisgatesecurity/aegisgate-scanner@v0.1.0
+#   - uses: aegisgatesecurity/aegisgate-scanner@v0.3.0
 #     with:
 #       fail-on-findings: 'false'
 #     continue-on-error: true

@@ -4,7 +4,8 @@
 // AegisGate Platform - Secret Detection Patterns
 // =========================================================================
 //
-// Port of aegisgate-lens/src/detectors/regex/secrets.js (45 patterns).
+// Port of aegisgate-lens/src/detectors/regex/secrets.js (45 base patterns).
+// Extended with additional cloud provider, API, and service credentials (64 total).
 // Regex strings are adapted from JavaScript /g flag syntax to Go regexp.
 // RE2 does not support lookbehind/lookahead; patterns requiring those
 // features have been rewritten or relaxed.
@@ -13,7 +14,7 @@
 package detectors
 
 // SecretsPatterns defines all secret detection patterns.
-// Lens parity: secrets.js v0.2.0 (45 patterns).
+// Lens parity: secrets.js v0.2.0 (45 base patterns), extended to 64.
 var SecretsPatterns = []PatternDef{
 	{
 		Name:        "secret_aws_key",
