@@ -120,6 +120,7 @@ func DetectAll(text string) []Match {
 			return detectWithPatterns(text, CompiledDangerousFunctionPatterns, "dangerous-function")
 		},
 		func() []Match { return detectWithPatterns(text, CompiledOTProtocolPatterns, "ot-protocols") },
+		func() []Match { return detectWithPatterns(text, CompiledTodoPatterns, "technical-debt") },
 	}
 	if len(customSnapshot) > 0 {
 		scanners = append(scanners, func() []Match {
@@ -176,6 +177,8 @@ func DetectAllWithResults(text string) ([]Match, []DetectionResult) {
 		{CompiledPIIInternationalPatterns, CategoryPIIInternational},
 		{CompiledCompliancePatterns, CategoryCompliance},
 		{CompiledDangerousFunctionPatterns, CategoryDangerousFunction},
+		{CompiledOTProtocolPatterns, CategoryOT},
+		{CompiledTodoPatterns, CategoryTodo},
 	}
 
 	results := make([]DetectionResult, len(categories))

@@ -685,6 +685,12 @@ func outputResults(result *scanner.ScanResult, root string, cfg *config.Config, 
 			return fmt.Errorf("JSON output: %w", err)
 		}
 
+	case "jsonl":
+		data, err = output.FormatJSONL(result, root, Version)
+		if err != nil {
+			return fmt.Errorf("JSONL output: %w", err)
+		}
+
 	case "html":
 		data, err = output.FormatHTML(result, root, Version)
 		if err != nil {
@@ -936,7 +942,7 @@ Commands:
   help           Show this help message
 
 Scan Options:
-  --format, -f <format>    Output format: sarif, json, text, html, pr-comment,
+  --format, -f <format>    Output format: sarif, json, jsonl, text, html, pr-comment,
                            github-actions, sbom (default: text)
   --output, -o <file>      Write output to file instead of stdout
   --severity, -s <level>   Minimum severity: critical, high, medium, low
@@ -979,7 +985,7 @@ func printScanUsage() {
 	fmt.Print(`Usage: aegisgate-scanner scan [path] [options]
 
 Options:
-  --format, -f <format>    Output format: sarif, json, text, html, pr-comment,
+  --format, -f <format>    Output format: sarif, json, jsonl, text, html, pr-comment,
                            github-actions, sbom (default: text)
   --output, -o <file>      Write output to file instead of stdout
   --severity, -s <level>   Minimum severity: critical, high, medium, low
