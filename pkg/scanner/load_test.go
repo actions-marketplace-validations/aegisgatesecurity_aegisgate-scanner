@@ -144,6 +144,9 @@ func memStatsMB() float64 {
 
 // TestLoad_1KFiles scans 1,000 files and measures throughput.
 func TestLoad_1KFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
 	corpusLoadTest(t, 1000, 1024, 4) // 1K files, ~1KB each, 4 workers
 }
 
@@ -199,11 +202,12 @@ func corpusLoadTest(t *testing.T, count, fileSize, concurrency int) {
 
 	// Time bound: generous bound based on observed throughput.
 	// At ~500 files/sec optimal, 10K files takes ~20s. Scale accordingly.
+	// Skip time assertion under -short (e.g. when running with -race).
 	maxDuration := time.Duration(count) * 5 * time.Millisecond // 5ms per file
 	if maxDuration < 30*time.Second {
 		maxDuration = 30 * time.Second
 	}
-	if elapsed > maxDuration {
+	if !testing.Short() && elapsed > maxDuration {
 		t.Errorf("load test took %v, expected < %v", elapsed, maxDuration)
 	}
 
@@ -302,6 +306,9 @@ func TestStress_ConcurrencyScaling(t *testing.T) {
 
 // TestStress_HighFindingDensity scans files packed with findings.
 func TestStress_HighFindingDensity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping stress test in short mode")
+	}
 	// 100 files, each with 500 findings.
 	arts := make([]artifacts.Artifact, 100)
 	for i := range arts {
@@ -337,7 +344,8 @@ func TestStress_HighFindingDensity(t *testing.T) {
 	}
 
 	// Should complete quickly even with high finding density.
-	if elapsed > 60*time.Second {
+	// Skip time assertion under -short (e.g. when running with -race).
+	if !testing.Short() && elapsed > 60*time.Second {
 		t.Errorf("high density scan took %v, expected < 60s", elapsed)
 	}
 }
@@ -347,22 +355,34 @@ func TestStress_HighFindingDensity(t *testing.T) {
 // ---------------------------------------------------------------------
 
 // TestBreak_HugeFile_10MB scans a single 10MB file.
+// Runs by default; takes ~4min at ~22s/MB.
 func TestBreak_HugeFile_10MB(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
 	hugeFileTest(t, 10*1024*1024)
 }
 
 // TestBreak_HugeFile_50MB scans a single 50MB file.
+// Opt-in only: takes ~19min at ~22s/MB. Run with -run TestBreak_HugeFile_50MB.
 func TestBreak_HugeFile_50MB(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
+	}
+	if os.Getenv("AEGISGATE_LONG_TESTS") == "" {
+		t.Skip("skipping 50MB test; set AEGISGATE_LONG_TESTS=1 to enable")
 	}
 	hugeFileTest(t, 50*1024*1024)
 }
 
 // TestBreak_HugeFile_100MB scans a single 100MB file — near the edge.
+// Opt-in only: takes ~38min at ~22s/MB. Run with -run TestBreak_HugeFile_100MB.
 func TestBreak_HugeFile_100MB(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
+	}
+	if os.Getenv("AEGISGATE_LONG_TESTS") == "" {
+		t.Skip("skipping 100MB test; set AEGISGATE_LONG_TESTS=1 to enable")
 	}
 	hugeFileTest(t, 100*1024*1024)
 }
@@ -396,8 +416,9 @@ func hugeFileTest(t *testing.T, size int) {
 
 	// Must not crash or hang. The 276-pattern regex engine processes
 	// ~22s/MB on large files, so use a generous bound.
+	// Skip time assertion under -short (e.g. when running with -race).
 	maxDuration := time.Duration(size/(1024*1024)) * 60 * time.Second // 60s per MB
-	if elapsed > maxDuration {
+	if !testing.Short() && elapsed > maxDuration {
 		t.Errorf("huge file scan took %v, expected < %v", elapsed, maxDuration)
 	}
 
@@ -472,13 +493,17 @@ func TestBreak_DeepDirectoryTree(t *testing.T) {
 	}
 
 	// Should complete quickly.
-	if elapsed > 30*time.Second {
+	// Skip time assertion under -short (e.g. when running with -race).
+	if !testing.Short() && elapsed > 30*time.Second {
 		t.Errorf("deep tree walk took %v, expected < 30s", elapsed)
 	}
 }
 
 // TestBreak_NoNewlines scans a file with a single very long line (1MB, no newlines).
 func TestBreak_NoNewlines(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping 1MB stress test in short mode")
+	}
 	// 1MB of text on a single line with a finding embedded.
 	longLine := strings.Repeat("A", 500*1024) + "AKIAIOSFODNN7EXAMPLE" + strings.Repeat("B", 500*1024)
 
@@ -509,7 +534,8 @@ func TestBreak_NoNewlines(t *testing.T) {
 	}
 
 	// Should not hang. 276 patterns × 1MB = ~10s observed.
-	if elapsed > 60*time.Second {
+	// Skip time assertion under -short (e.g. when running with -race).
+	if !testing.Short() && elapsed > 60*time.Second {
 		t.Errorf("single-line scan took %v, expected < 30s", elapsed)
 	}
 }
@@ -704,7 +730,8 @@ func TestCrush_ConcurrentScanners(t *testing.T) {
 	}
 
 	// Should complete in reasonable time.
-	if elapsed > 60*time.Second {
+	// Skip time assertion under -short (e.g. when running with -race).
+	if !testing.Short() && elapsed > 60*time.Second {
 		t.Errorf("concurrent scanners took %v, expected < 60s", elapsed)
 	}
 }
