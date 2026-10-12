@@ -1,75 +1,147 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright 2024-2026 AegisGate Security, LLC -->
-
 # Contributing to AegisGate Scanner
 
-Thank you for your interest in contributing to AegisGate Scanner!
+Thank you for your interest in improving AegisGate Scanner! This document
+covers the process for contributing code, reporting issues, and suggesting
+features.
 
-## DCO (Developer Certificate of Origin)
+## Prerequisites
 
-All commits must be signed off with `git commit -s` to indicate your
-agreement with the [Developer Certificate of Origin](https://developercertificate.org/).
+- Go 1.26+
+- Git
+- For ML features: ONNX Runtime (vendored for Linux amd64)
 
-See [DCO.md](DCO.md) for full details.
-
-## Build
+## Getting Started
 
 ```bash
-# Non-CGO (heuristic-only, static binary)
-CGO_ENABLED=0 go build -o aegisgate-scanner ./cmd/aegisgate-scanner/
-
-# CGO (full ML, requires libonnxruntime.so)
-CGO_ENABLED=1 \
-  CGO_CFLAGS="-I$(pwd)/internal/onnxruntime_go" \
-  CGO_LDFLAGS="-L$(pwd)/lib/amd64 -lonnxruntime -ldl" \
-  ONNXRUNTIME_SHARED_LIBRARY_PATH=$(pwd)/lib/amd64/libonnxruntime.so \
-  LD_LIBRARY_PATH=$(pwd)/lib/amd64 \
-  go build -o aegisgate-scanner ./cmd/aegisgate-scanner/
+git clone https://github.com/aegisgatesecurity/aegisgate-scanner.git
+cd aegisgate-scanner
+go build ./cmd/aegisgate-scanner/
+go test ./...
 ```
 
-## Test
+## Development Workflow
+
+### 1. Create a Branch
 
 ```bash
-# Non-CGO tests (heuristic-only)
-CGO_ENABLED=0 go test -v -cover ./...
+git checkout -b feat/my-feature
+```
 
-# CGO tests (full ML)
-CGO_ENABLED=1 \
-  CGO_CFLAGS="-I$(pwd)/internal/onnxruntime_go" \
-  CGO_LDFLAGS="-L$(pwd)/lib/amd64 -lonnxruntime -ldl" \
-  ONNXRUNTIME_SHARED_LIBRARY_PATH=$(pwd)/lib/amd64/libonnxruntime.so \
-  LD_LIBRARY_PATH=$(pwd)/lib/amd64 \
-  go test -v -cover ./...
+### 2. Make Changes
+
+Follow these conventions:
+
+- **SPDX header** required on all new `.go` files:
+  ```go
+  // SPDX-License-Identifier: Apache-2.0
+  package mypackage
+  ```
+- **gofmt** — all code must be formatted: `gofmt -w .`
+- **go vet** — must pass: `go vet ./...`
+- **Test coverage** — all packages must maintain ≥90% coverage
+- **No external dependencies** — the scanner must remain air-gapped capable
+
+### 3. Test
+
+```bash
+# Non-CGO tests
+CGO_ENABLED=0 go test ./...
+
+# With coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+
+# ML tests (slower, requires CGO)
+CGO_ENABLED=1 go test -timeout 180s ./...
 
 # Race detector
-CGO_ENABLED=1 go test -race -count=1 ./...
+go test -race -count=1 ./...
 ```
 
-## Docker
+### 4. Commit (DCO Required)
+
+Every commit must include a `Signed-off-by` line (Developer Certificate of Origin):
 
 ```bash
-# Full ML image
-docker build -t aegisgate-scanner:latest .
+git commit -s -m "feat: add new detection pattern for XYZ
 
-# Heuristic-only (lite) image
-docker build --build-arg CGO_ENABLED=0 --target lite -t aegisgate-scanner:lite .
+Description of what was added and why.
+
+Signed-off-by: Your Name <your.email@example.com>"
 ```
 
-## Pre-commit Hooks
+The `-s` flag adds the Signed-off-by line automatically.
+
+### Commit Message Convention
+
+Follow conventional commits:
+
+| Type | Use |
+|------|-----|
+| `feat:` | New feature |
+| `fix:` | Bug fix |
+| `test:` | Test improvements |
+| `docs:` | Documentation |
+| `refactor:` | Code restructuring |
+| `chore:` | Maintenance |
+| `ci:` | CI/CD changes |
+
+### 5. Push and Create PR
 
 ```bash
-git config core.hooksPath .githooks
+git push origin feat/my-feature
 ```
 
-This enables OPSEC scanning, gofmt, and go vet on every commit.
+Create a pull request on GitHub. CI will automatically run:
+- DCO check
+- Lint (go vet, gofmt, go mod tidy)
+- Tests (non-CGO and CGO)
+- Coverage check (≥90% per package)
+- Build verification (both CGO modes)
+- Docker build
 
-## Code Style
+## Adding Detection Patterns
 
-- `gofmt` is mandatory — CI will reject unformatted code
-- `go vet` must pass
-- No external dependencies — all third-party code is vendored into `internal/`
-- Test coverage must be ≥ 90%
+New detection patterns go in `internal/detectors/`. Each pattern needs:
+
+1. **Pattern definition** with unique `Name`, `Severity`, `Regex`, and `Description`
+2. **Tests** in a corresponding `_test.go` file
+3. **Rule metadata** (CWE/OWASP) in `pkg/output/rule_metadata.go` — see fallback logic for category-based defaults
+
+Pattern severity levels:
+
+| Severity | Use |
+|----------|-----|
+| `SeverityCritical` | Code execution, data exfiltration, prompt injection |
+| `SeverityHigh` | Secrets, dangerous functions, SSRF |
+| `SeverityMedium` | PII, internal URLs, compliance references |
+| `SeverityLow` | Informational, minor policy violations |
+
+## Adding Output Formats
+
+New output formats go in `pkg/output/`. Each formatter must:
+
+1. Implement the output function
+2. Be registered in the CLI (`cmd/aegisgate-scanner/main.go`)
+3. Be added to `--help` text
+4. Include tests
+
+## Code Review
+
+All PRs require review. Reviewers check for:
+
+- Correctness of detection logic
+- False positive potential
+- Test coverage
+- Performance impact
+- Security (no path traversal, no injection in patterns)
 
 ## License
 
-All contributions are made under the Apache License, Version 2.0.
+By contributing, you agree that your contributions are licensed under
+Apache-2.0.
+
+## Questions?
+
+- Open a [Discussion](https://github.com/aegisgatesecurity/aegisgate-scanner/discussions)
+- Email: **dev@aegisgate.ai**

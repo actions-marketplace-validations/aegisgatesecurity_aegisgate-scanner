@@ -1,82 +1,63 @@
-<!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright 2024-2026 AegisGate Security, LLC -->
-
 # Security Policy
-
-## Supported Versions
-
-AegisGate Scanner follows semantic versioning.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1   | :x:                |
-
-## Security Architecture
-
-AegisGate Scanner is a static analysis tool for AI artifacts. It scans files
-in CI/CD pipelines and local development environments for security threats
-before deployment. The scanner operates entirely offline — no network
-connections are made during scanning.
-
-### Detection Layers
-
-| Layer | Protection | Mode |
-|-------|-----------|------|
-| L1 | Regex pattern matching (223 patterns) | Heuristic |
-| L2 | Compliance pattern matching (35 patterns) | Heuristic |
-| L3 | CharCNN-BiLSTM neural threat detection (v13) | Neural (CGO) |
-| L4 | Evasion-resistant text normalization | Heuristic |
-| L5 | PII detection (US core, US extended, financial, international) | Heuristic |
-| L6 | Secret detection (65 credential patterns) | Heuristic |
-
-### Dual Build Modes
-
-| Mode | CGO | ML | Binary Size | Docker Image |
-|------|-----|----|-------------|--------------|
-| Full | `CGO_ENABLED=1` | Neural (ONNX Runtime) | ~15MB | ~140MB (debian:bookworm-slim) |
-| Lite | `CGO_ENABLED=0` | Heuristic-only | ~8MB | ~2MB (distroless) |
-
-### Artifact Classes Scanned
-
-| Class | File Types | Threats Detected |
-|-------|-----------|-----------------|
-| RAG documents | .txt, .md, .json, .jsonl, .csv, .html | Prompt injection, PII, secrets |
-| Training datasets | .jsonl, .csv, .json | Data poisoning, PII, secrets |
-| Model configs | .yaml, .yml, .json | Tool poisoning, insecure configs |
-| Agent skills | .json, .yaml, .py, .ts | Prompt injection, code injection |
-
-### Supply Chain Security
-
-- **Zero external module dependencies** (no `require` directives in go.mod)
-- All third-party code vendored: onnxruntime_go (MIT), libonnxruntime.so (MIT, Microsoft), golang.org/x/text (BSD-3-Clause)
-- Model integrity verified via SHA-256 hash at load time
-- Binary signing via Sigstore/cosign (keyless, OIDC)
-
-## Security Features
-
-| Tool | Purpose | Frequency |
-|------|---------|-----------|
-| **govulncheck** | Go vulnerability database | Every push |
-| **gosec** | Static security analysis | Every push |
-| **Trivy** | Container & filesystem scan | Every push + weekly |
-| **Gitleaks** | Secret detection (git history) | Every push |
-| **TruffleHog** | Verified secret detection | Every push |
-| **go vet** | Standard Go analysis | Every push |
-| **OPSEC scan** | Private paths, internal docs, secrets | Every push + pre-commit |
-| **SBOM** | CycloneDX + SPDX generation | Every push + releases |
 
 ## Reporting a Vulnerability
 
-**DO NOT open a public GitHub issue for security vulnerabilities.**
+If you discover a security vulnerability in AegisGate Scanner, please
+report it responsibly.
 
-Email: security@aegisgatesecurity.io
+### How to Report
 
-Please include:
-1. Description of the vulnerability
-2. Steps to reproduce
-3. Potential impact
-4. Suggested fix (if any)
+1. **DO NOT** open a public GitHub issue.
+2. Email: **security@aegisgate.ai**
+3. Include:
+   - Description of the vulnerability
+   - Steps to reproduce
+   - Potential impact
+   - Suggested fix (if any)
 
-We will acknowledge receipt within 48 hours and provide a fix or mitigation within
-90 days. Valid vulnerability reports may be eligible for a bounty.
+### Response Timeline
+
+| Step | Target |
+|------|--------|
+| Acknowledgment | 48 hours |
+| Initial assessment | 5 business days |
+| Fix or mitigation | 30 days (severity-dependent) |
+| Public disclosure | After fix is released |
+
+### Scope
+
+- AegisGate Scanner (this repository)
+- Detection bypass vulnerabilities (patterns that fail to detect known threats)
+- False positive/negative issues with security implications
+- Supply chain risks in dependencies
+
+### Out of Scope
+
+- Vulnerabilities in third-party dependencies (report upstream)
+- Issues in the AegisGate Platform product (separate disclosure process)
+- Social engineering attacks
+
+### PGP
+
+For sensitive reports, encrypt to:
+
+```
+AegisGate Security Team <security@aegisgate.ai>
+```
+
+(Contact us via email for the current public key fingerprint.)
+
+## Security Features
+
+AegisGate Scanner includes built-in security measures:
+
+- **Path traversal protection** in archive extraction (Zip Slip / Tar Slip prevention)
+- **Symlink loop detection** during directory walks
+- **File size limits** to prevent resource exhaustion
+- **No network calls** during scanning (air-gapped capable)
+- **No telemetry** — the scanner does not phone home
+
+## Acknowledgments
+
+Responsible disclosure reporters will be credited here (with permission)
+after the vulnerability is fixed.
