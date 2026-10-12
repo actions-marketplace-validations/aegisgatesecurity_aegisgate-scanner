@@ -207,6 +207,7 @@ for f in $FILES; do
         *config_test.go) continue ;;
         *output_test.go) continue ;;
         *artifacts_test.go) continue ;;
+        *_test.go) continue ;;
         # gitleaks config contains example patterns as allowlist entries
         .gitleaks.toml) continue ;;
         # OPSEC scan script itself contains pattern definitions

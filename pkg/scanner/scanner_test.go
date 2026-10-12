@@ -10,8 +10,8 @@
 //   - scanRegex (line-by-line, full-content dedup)
 //   - scanML (graceful skip when no model loaded)
 //   - Helper functions (byteOffsetToLineCol, truncate, formatRegexMessage,
-//     alreadyFound, splitSegments, filterBySeverity, recordRegexFindings,
-//     hasRegexFinding)
+//     alreadyFound, splitSegments, filterBySeverity, buildRegexFindingLines,
+//     hasRegexFindingLine)
 //   - Edge cases (empty, single line, long lines, unicode, no findings)
 //
 // All tests use standard Go testing only. ML tests gracefully skip when
@@ -753,7 +753,7 @@ func TestScanML_NoModel(t *testing.T) {
 
 	// Without a loaded model, the detector's Detect returns IsThreat=false.
 	art := makeArtifact("test.txt", "some content without regex patterns\n")
-	findings := s.scanML(art)
+	findings := s.scanML(art, buildRegexFindingLines(nil))
 
 	if len(findings) != 0 {
 		t.Errorf("scanML without loaded model should return 0 findings, got %d", len(findings))
@@ -1162,10 +1162,10 @@ func TestFilterBySeverity_AllFiltered(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// Helper: recordRegexFindings / hasRegexFinding
+// Helper: buildRegexFindingLines / hasRegexFindingLine
 // ---------------------------------------------------------------------
 
-func TestRecordRegexFindings_AndHasRegexFinding(t *testing.T) {
+func TestBuildRegexFindingLines_AndHasRegexFindingLine(t *testing.T) {
 	findings := []Finding{
 		{Artifact: "file1.txt", DetectionLayer: "regex", Line: 3, EndLine: 5},
 		{Artifact: "file1.txt", DetectionLayer: "regex", Line: 10, EndLine: 10},
@@ -1173,70 +1173,38 @@ func TestRecordRegexFindings_AndHasRegexFinding(t *testing.T) {
 		{Artifact: "file1.txt", DetectionLayer: "ml", Line: 7, EndLine: 7}, // should be ignored
 	}
 
-	recordRegexFindings(findings)
+	regexLines := buildRegexFindingLines(findings)
 
 	// Lines 3,4,5 for file1 should be marked.
 	for _, line := range []int{3, 4, 5, 10} {
-		if !hasRegexFinding("file1.txt", line) {
-			t.Errorf("hasRegexFinding(file1.txt, %d) = false, want true", line)
+		if !hasRegexFindingLine(regexLines, line) {
+			t.Errorf("hasRegexFindingLine(regexLines, %d) = false, want true", line)
 		}
 	}
 
 	// Line 7 (ML finding) should not be marked.
-	if hasRegexFinding("file1.txt", 7) {
-		t.Error("hasRegexFinding(file1.txt, 7) should be false (ML finding)")
-	}
-
-	// file2 line 1 should be marked.
-	if !hasRegexFinding("file2.txt", 1) {
-		t.Error("hasRegexFinding(file2.txt, 1) should be true")
-	}
-
-	// Non-existent file should return false.
-	if hasRegexFinding("nonexistent.txt", 1) {
-		t.Error("hasRegexFinding for non-existent file should be false")
+	if hasRegexFindingLine(regexLines, 7) {
+		t.Error("hasRegexFindingLine(regexLines, 7) should be false (ML finding)")
 	}
 
 	// Non-marked line should return false.
-	if hasRegexFinding("file1.txt", 100) {
-		t.Error("hasRegexFinding(file1.txt, 100) should be false")
+	if hasRegexFindingLine(regexLines, 100) {
+		t.Error("hasRegexFindingLine(regexLines, 100) should be false")
 	}
 }
 
-func TestRecordRegexFindings_ResetsCache(t *testing.T) {
-	// First recording.
-	recordRegexFindings([]Finding{
-		{Artifact: "old.txt", DetectionLayer: "regex", Line: 1, EndLine: 1},
-	})
-	if !hasRegexFinding("old.txt", 1) {
-		t.Fatal("old.txt should have regex finding after first record")
-	}
-
-	// Second recording should clear old entries.
-	recordRegexFindings([]Finding{
-		{Artifact: "new.txt", DetectionLayer: "regex", Line: 1, EndLine: 1},
-	})
-	if hasRegexFinding("old.txt", 1) {
-		t.Error("old.txt should no longer have regex finding after reset")
-	}
-	if !hasRegexFinding("new.txt", 1) {
-		t.Error("new.txt should have regex finding after second record")
+func TestBuildRegexFindingLines_Empty(t *testing.T) {
+	regexLines := buildRegexFindingLines(nil)
+	// Should not panic and should return empty map.
+	if hasRegexFindingLine(regexLines, 1) {
+		t.Error("hasRegexFindingLine should be false for empty regex lines")
 	}
 }
 
-func TestRecordRegexFindings_Empty(t *testing.T) {
-	recordRegexFindings(nil)
-	// Should not panic and should clear any existing cache.
-	if hasRegexFinding("any.txt", 1) {
-		t.Error("hasRegexFinding should be false after recording empty findings")
-	}
-}
-
-func TestHasRegexFinding_NoRecordedFindings(t *testing.T) {
-	// Reset cache.
-	recordRegexFindings(nil)
-	if hasRegexFinding("anything.txt", 1) {
-		t.Error("hasRegexFinding should return false when nothing recorded")
+func TestHasRegexFindingLine_NilMap(t *testing.T) {
+	// Nil map should return false.
+	if hasRegexFindingLine(nil, 1) {
+		t.Error("hasRegexFindingLine should return false for nil map")
 	}
 }
 

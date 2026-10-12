@@ -104,6 +104,15 @@ type ScanOptions struct {
 	// MaxFindingsPerFile limits the number of findings per file.
 	// 0 = unlimited.
 	MaxFindingsPerFile int
+
+	// DisableRules is a list of rule IDs to skip during scanning.
+	DisableRules []string
+
+	// Concurrency controls how many files are scanned in parallel.
+	// 0 = sequential (default for backwards compatibility).
+	// 1 = single worker (same as sequential but with goroutine overhead).
+	// >1 = parallel scanning with a worker pool.
+	Concurrency int
 }
 
 // ScanResult holds the results of scanning a set of artifacts.
@@ -186,16 +195,22 @@ func (s *Scanner) ScanArtifact(art artifacts.Artifact, opts ScanOptions) []Findi
 
 	// --- Layer 1: Regex detection ---
 	regexFindings := s.scanRegex(art)
+
+	// Filter out disabled rules.
+	if len(opts.DisableRules) > 0 {
+		regexFindings = filterDisabledRules(regexFindings, opts.DisableRules)
+	}
+
 	findings = append(findings, regexFindings...)
 
-	// Record regex finding lines for ML supplementary logic.
-	recordRegexFindings(regexFindings)
+	// Build per-artifact regex finding map for ML supplementary logic.
+	regexLines := buildRegexFindingLines(regexFindings)
 
 	// --- Layer 2: ML detection (supplementary) ---
 	// Only run ML if enabled AND the content is substantial enough.
 	// ML is supplementary — it catches what regex misses.
 	if s.mlEnabled && s.mlDetector != nil && s.mlDetector.IsEnabled() {
-		mlFindings := s.scanML(art)
+		mlFindings := s.scanML(art, regexLines)
 		findings = append(findings, mlFindings...)
 	}
 
@@ -224,29 +239,93 @@ func (s *Scanner) ScanArtifacts(arts []artifacts.Artifact, opts ScanOptions) *Sc
 		},
 	}
 
-	for _, art := range arts {
-		findings := s.ScanArtifact(art, opts)
-		result.Stats.FilesScanned++
-
-		if len(findings) > 0 {
-			result.Stats.FilesWithFindings++
-			result.Stats.TotalFindings += len(findings)
-
-			for _, f := range findings {
-				result.Stats.BySeverity[f.Severity]++
-				result.Stats.ByCategory[f.Category]++
-				result.Stats.ByLayer[f.DetectionLayer]++
-				if f.DetectionLayer == "ml" {
-					result.Stats.MLInferences++
-				}
-			}
-
-			result.Findings = append(result.Findings, findings...)
-		}
+	if opts.Concurrency > 1 && len(arts) > 1 {
+		s.scanConcurrent(arts, opts, result)
+	} else {
+		s.scanSequential(arts, opts, result)
 	}
 
 	result.Duration = time.Since(start)
 	return result
+}
+
+// scanSequential scans artifacts one at a time.
+func (s *Scanner) scanSequential(arts []artifacts.Artifact, opts ScanOptions, result *ScanResult) {
+	for _, art := range arts {
+		findings := s.ScanArtifact(art, opts)
+		s.recordFindings(result, art, findings)
+	}
+}
+
+// scanConcurrent scans artifacts using a worker pool.
+func (s *Scanner) scanConcurrent(arts []artifacts.Artifact, opts ScanOptions, result *ScanResult) {
+	type fileResult struct {
+		Index    int
+		Findings []Finding
+		Art      artifacts.Artifact
+	}
+
+	numWorkers := opts.Concurrency
+	if numWorkers > len(arts) {
+		numWorkers = len(arts)
+	}
+
+	jobs := make(chan int, len(arts))
+	results := make(chan fileResult, len(arts))
+
+	// Start workers.
+	var wg sync.WaitGroup
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx := range jobs {
+				findings := s.ScanArtifact(arts[idx], opts)
+				results <- fileResult{Index: idx, Findings: findings, Art: arts[idx]}
+			}
+		}()
+	}
+
+	// Send jobs.
+	for i := range arts {
+		jobs <- i
+	}
+	close(jobs)
+
+	// Wait for all workers to finish, then close results.
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results.
+	for fr := range results {
+		s.recordFindings(result, fr.Art, fr.Findings)
+	}
+}
+
+// recordFindings adds findings to the result and updates stats.
+func (s *Scanner) recordFindings(result *ScanResult, art artifacts.Artifact, findings []Finding) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	result.Stats.FilesScanned++
+
+	if len(findings) > 0 {
+		result.Stats.FilesWithFindings++
+		result.Stats.TotalFindings += len(findings)
+
+		for _, f := range findings {
+			result.Stats.BySeverity[f.Severity]++
+			result.Stats.ByCategory[f.Category]++
+			result.Stats.ByLayer[f.DetectionLayer]++
+			if f.DetectionLayer == "ml" {
+				result.Stats.MLInferences++
+			}
+		}
+
+		result.Findings = append(result.Findings, findings...)
+	}
 }
 
 // ---------------------------------------------------------------------
@@ -321,7 +400,7 @@ func (s *Scanner) scanRegex(art artifacts.Artifact) []Finding {
 
 // scanML runs the ML threat detector on an artifact.
 // ML is supplementary — it scans content segments that regex didn't flag.
-func (s *Scanner) scanML(art artifacts.Artifact) []Finding {
+func (s *Scanner) scanML(art artifacts.Artifact, regexLines map[int]bool) []Finding {
 	var findings []Finding
 
 	// Scan content in segments (paragraphs or significant chunks).
@@ -329,7 +408,7 @@ func (s *Scanner) scanML(art artifacts.Artifact) []Finding {
 
 	for _, seg := range segments {
 		// Skip segments that already have regex findings — ML is supplementary.
-		if hasRegexFinding(art.Path, seg.StartLine) {
+		if hasRegexFindingLine(regexLines, seg.StartLine) {
 			continue
 		}
 
@@ -457,33 +536,24 @@ func alreadyFound(findings []Finding, path, ruleID string, line, col int) bool {
 	return false
 }
 
-// hasRegexFinding checks if there are regex findings on a given line.
-// This is used to skip ML scanning of lines already flagged by regex.
-// Note: This uses a package-level cache that is reset per scan.
-var regexFindingLines = make(map[string]map[int]bool)
-
-func recordRegexFindings(findings []Finding) {
-	regexFindingLines = make(map[string]map[int]bool)
+// buildRegexFindingLines creates a per-artifact map of lines with regex findings.
+// This replaces the package-level global to be safe for concurrent scanning.
+func buildRegexFindingLines(findings []Finding) map[int]bool {
+	lines := make(map[int]bool)
 	for _, f := range findings {
 		if f.DetectionLayer != "regex" {
 			continue
 		}
-		path := f.Artifact
-		if regexFindingLines[path] == nil {
-			regexFindingLines[path] = make(map[int]bool)
-		}
 		for line := f.Line; line <= f.EndLine; line++ {
-			regexFindingLines[path][line] = true
+			lines[line] = true
 		}
 	}
+	return lines
 }
 
-func hasRegexFinding(path string, line int) bool {
-	lines, ok := regexFindingLines[path]
-	if !ok {
-		return false
-	}
-	return lines[line]
+// hasRegexFindingLine checks if a specific line has regex findings.
+func hasRegexFindingLine(regexLines map[int]bool, line int) bool {
+	return regexLines[line]
 }
 
 // filterBySeverity removes findings below the minimum severity.
@@ -503,6 +573,24 @@ func filterBySeverity(findings []Finding, min Severity) []Finding {
 	filtered := findings[:0]
 	for _, f := range findings {
 		if r, ok := rank[f.Severity]; ok && r >= minRank {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+// filterDisabledRules removes findings whose rule ID is in the disabled list.
+func filterDisabledRules(findings []Finding, disabled []string) []Finding {
+	if len(disabled) == 0 {
+		return findings
+	}
+	disabledSet := make(map[string]bool, len(disabled))
+	for _, r := range disabled {
+		disabledSet[r] = true
+	}
+	filtered := findings[:0]
+	for _, f := range findings {
+		if !disabledSet[f.RuleID] {
 			filtered = append(filtered, f)
 		}
 	}

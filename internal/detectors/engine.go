@@ -12,6 +12,7 @@
 package detectors
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"time"
@@ -94,7 +95,9 @@ func DetectAll(text string) []Match {
 	all = append(all, DetectPIIFinancial(text)...)
 	all = append(all, DetectPIIInternational(text)...)
 	all = append(all, DetectCompliance(text)...)
+	all = append(all, DetectDangerousFunctions(text)...)
 	all = append(all, DetectOTProtocols(text)...)
+	all = append(all, DetectCustomPatterns(text)...)
 
 	// Sort all matches by index
 	sort.Slice(all, func(i, j int) bool {
@@ -115,6 +118,7 @@ func DetectAllWithResults(text string) ([]Match, []DetectionResult) {
 		detectWithResult(text, CompiledPIIFinancialPatterns, CategoryPIIFinancial),
 		detectWithResult(text, CompiledPIIInternationalPatterns, CategoryPIIInternational),
 		detectWithResult(text, CompiledCompliancePatterns, CategoryCompliance),
+		detectWithResult(text, CompiledDangerousFunctionPatterns, CategoryDangerousFunction),
 	}
 
 	all := DetectAll(text)
@@ -131,4 +135,45 @@ func detectWithResult(text string, patterns []compiledPattern, category Category
 		PatternCount: len(patterns),
 		ElapsedNS:    time.Since(start).Nanoseconds(),
 	}
+}
+
+// ---------------------------------------------------------------------
+// Custom pattern registration (runtime extension)
+// ---------------------------------------------------------------------
+
+// customPatterns holds patterns registered at runtime via RegisterCustomPatterns.
+var customPatterns []compiledPattern
+
+// RegisterCustomPatterns compiles and registers custom pattern definitions.
+// These patterns are included in all subsequent DetectAll calls.
+// Returns an error if any pattern has an invalid regex.
+func RegisterCustomPatterns(defs []PatternDef) error {
+	for _, def := range defs {
+		re, err := regexp.Compile(def.Regex)
+		if err != nil {
+			return fmt.Errorf("invalid regex for custom pattern %s: %w", def.Name, err)
+		}
+		customPatterns = append(customPatterns, compiledPattern{
+			Name:        def.Name,
+			Severity:    def.Severity,
+			Confidence:  1.0,
+			Compiled:    re,
+			Description: def.Description,
+		})
+	}
+	return nil
+}
+
+// DetectCustomPatterns scans text using runtime-registered custom patterns.
+func DetectCustomPatterns(text string) []Match {
+	if len(customPatterns) == 0 {
+		return nil
+	}
+	return detectWithPatterns(text, customPatterns, "custom")
+}
+
+// ResetCustomPatterns clears all registered custom patterns.
+// Primarily used in tests.
+func ResetCustomPatterns() {
+	customPatterns = nil
 }

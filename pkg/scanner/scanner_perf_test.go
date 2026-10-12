@@ -166,12 +166,9 @@ func BenchmarkScanML_Segments(b *testing.B) {
 		b.Skip("ML not available")
 	}
 
-	// Reset the regex finding cache so ML scans all segments.
-	recordRegexFindings(nil)
-
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		s.scanML(art)
+		s.scanML(art, buildRegexFindingLines(nil))
 	}
 }
 

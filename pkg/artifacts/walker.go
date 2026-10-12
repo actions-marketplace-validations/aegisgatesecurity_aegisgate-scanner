@@ -99,6 +99,12 @@ type WalkOptions struct {
 	// Extensions restricts scanning to specific file extensions.
 	// If empty, all supported extensions are scanned.
 	Extensions []string
+
+	// RespectGitIgnore enables .gitignore-aware file exclusion.
+	// When true, the walker loads .gitignore files from the root and
+	// parent directories and skips matching files/directories.
+	// Gitignore rules take precedence over IgnorePaths.
+	RespectGitIgnore bool
 }
 
 // WalkResult holds the results of a directory walk.
@@ -460,11 +466,21 @@ func Walk(opts WalkOptions) (*WalkResult, error) {
 		extFilter[strings.ToLower(ext)] = true
 	}
 
+	// Load .gitignore matchers if requested.
+	var gitignoreMatchers []*GitIgnoreMatcher
+	if opts.RespectGitIgnore {
+		gitignoreMatchers, err = LoadGitIgnoreHierarchy(root)
+		if err != nil {
+			// Silently continue if .gitignore loading fails.
+			gitignoreMatchers = nil
+		}
+	}
+
 	// Track visited inodes to prevent symlink loops. Shared across all
 	// recursive walkInternal calls so loops are detected at any depth.
 	visited := make(map[uint64]bool)
 
-	return walkInternal(opts, root, ignorePatterns, maxFileSize, extFilter, visited)
+	return walkInternal(opts, root, ignorePatterns, maxFileSize, extFilter, visited, gitignoreMatchers)
 }
 
 // walkInternal performs the actual directory walk with a shared visited map
@@ -476,6 +492,7 @@ func walkInternal(
 	maxFileSize int64,
 	extFilter map[string]bool,
 	visited map[uint64]bool,
+	gitignoreMatchers []*GitIgnoreMatcher,
 ) (*WalkResult, error) {
 	result := &WalkResult{
 		Stats: WalkStats{
@@ -496,6 +513,16 @@ func walkInternal(
 		}
 
 		rel := relPath(root, path)
+
+		// Gitignore check (takes precedence over shouldIgnore).
+		if opts.RespectGitIgnore && len(gitignoreMatchers) > 0 {
+			if IsIgnored(rel, d.IsDir(), gitignoreMatchers) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
 
 		// Skip ignored paths.
 		if shouldIgnore(rel, ignorePatterns) {
@@ -551,7 +578,7 @@ func walkInternal(
 				}
 
 				// Walk the resolved target with the same visited map.
-				subResult, err := walkInternal(opts, realPath, ignorePatterns, maxFileSize, extFilter, visited)
+				subResult, err := walkInternal(opts, realPath, ignorePatterns, maxFileSize, extFilter, visited, gitignoreMatchers)
 				if err != nil {
 					return nil
 				}

@@ -24,13 +24,14 @@ const (
 type Category string
 
 const (
-	CategorySecrets          Category = "secrets"
-	CategoryPIIUSCore        Category = "pii-us-core"
-	CategoryPIIUSExtended    Category = "pii-us-extended"
-	CategoryPIIFinancial     Category = "pii-financial"
-	CategoryPIIInternational Category = "pii-international"
-	CategoryXSS              Category = "xss"
-	CategoryCompliance       Category = "compliance"
+	CategorySecrets           Category = "secrets"
+	CategoryPIIUSCore         Category = "pii-us-core"
+	CategoryPIIUSExtended     Category = "pii-us-extended"
+	CategoryPIIFinancial      Category = "pii-financial"
+	CategoryPIIInternational  Category = "pii-international"
+	CategoryXSS               Category = "xss"
+	CategoryCompliance        Category = "compliance"
+	CategoryDangerousFunction Category = "dangerous_function"
 )
 
 // Match represents a single regex detection match.
@@ -67,6 +68,9 @@ type PatternDef struct {
 
 	// Description is a human-readable description of what the pattern detects
 	Description string
+
+	// Category is the detection category (optional, used for custom rules).
+	Category Category
 }
 
 // DetectionResult holds the results from scanning text with all patterns

@@ -63,16 +63,20 @@ type sarifRule struct {
 	Name             string         `json:"name"`
 	ShortDescription sarifMessage   `json:"shortDescription"`
 	FullDescription  sarifMessage   `json:"fullDescription,omitempty"`
+	Help             sarifMessage   `json:"help,omitempty"`
 	HelpURI          string         `json:"helpUri,omitempty"`
 	Properties       sarifRuleProps `json:"properties,omitempty"`
 }
 
-// sarifRuleProps holds rule properties for GitHub UI.
+// sarifRuleProps holds rule properties for GitHub UI, including CWE and
+// OWASP LLM Top 10 references from the rule metadata database.
 type sarifRuleProps struct {
 	Tags      []string `json:"tags,omitempty"`
 	Precision string   `json:"precision,omitempty"`
 	Severity  string   `json:"severity,omitempty"`
 	Category  string   `json:"category,omitempty"`
+	CWE       []int    `json:"cwe,omitempty"`
+	OWASP     string   `json:"owasp,omitempty"`
 }
 
 // sarifResult represents a single finding.
@@ -188,11 +192,19 @@ func buildSARIFRules(result *scanner.ScanResult) []sarifRule {
 			continue
 		}
 
+		meta := GetRuleMetadataWithDefault(f.RuleID)
+
 		rule := sarifRule{
 			ID:   f.RuleID,
 			Name: strings.ReplaceAll(f.RuleID, "_", "-"),
 			ShortDescription: sarifMessage{
-				Text: f.Message,
+				Text: meta.Description,
+			},
+			FullDescription: sarifMessage{
+				Text: meta.Description,
+			},
+			Help: sarifMessage{
+				Text: meta.Remediation,
 			},
 			HelpURI: "https://aegisgatesecurity.io/docs/scanner/rules/" + f.RuleID,
 			Properties: sarifRuleProps{
@@ -200,6 +212,8 @@ func buildSARIFRules(result *scanner.ScanResult) []sarifRule {
 				Precision: "high",
 				Severity:  string(f.Severity),
 				Category:  f.Category,
+				CWE:       meta.CWE,
+				OWASP:     meta.OWASPLLMTop,
 			},
 		}
 

@@ -80,6 +80,36 @@ type Config struct {
 	// ModelPath is the path to the ONNX model file.
 	// If empty, uses the default path.
 	ModelPath string `yaml:"model_path"`
+
+	// BaselinePath is the path to a baseline file for suppressing
+	// known/accepted findings. If empty, no baseline is used.
+	BaselinePath string `yaml:"baseline_path"`
+
+	// CustomRules are user-defined detection patterns.
+	// Each rule has a name, regex pattern, severity, category, and description.
+	CustomRules []CustomRuleConfig `yaml:"custom_rules"`
+
+	// RespectGitIgnore controls whether .gitignore files are respected
+	// when walking directories. Default: true.
+	RespectGitIgnore bool `yaml:"respect_gitignore"`
+
+	// FailOnSeverity is the minimum severity that causes a non-zero exit code.
+	// Findings below this severity are reported but don't fail the scan.
+	// Options: critical, high, medium, low.
+	// Default: low (any finding fails).
+	FailOnSeverity string `yaml:"fail_on_severity"`
+
+	// DisableRules is a list of rule IDs to disable (skip during scanning).
+	DisableRules []string `yaml:"disable_rules"`
+}
+
+// CustomRuleConfig defines a user-created detection rule in the config file.
+type CustomRuleConfig struct {
+	Name        string `yaml:"name"`
+	Pattern     string `yaml:"pattern"`
+	Severity    string `yaml:"severity"`
+	Category    string `yaml:"category"`
+	Description string `yaml:"description"`
 }
 
 // ---------------------------------------------------------------------
@@ -100,6 +130,10 @@ func Default() *Config {
 		OutputFormat:       "text",
 		ColorOutput:        true,
 		ModelPath:          "",
+		BaselinePath:       "",
+		RespectGitIgnore:   true,
+		FailOnSeverity:     "low",
+		DisableRules:       []string{},
 	}
 }
 
@@ -186,6 +220,28 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid max_file_size: %d (must be >= 0)", c.MaxFileSize)
 	}
 
+	// Validate fail_on_severity.
+	switch strings.ToLower(c.FailOnSeverity) {
+	case "critical", "high", "medium", "low", "":
+	default:
+		return fmt.Errorf("invalid fail_on_severity: %s (must be critical, high, medium, or low)", c.FailOnSeverity)
+	}
+
+	// Validate custom rules.
+	for i, rule := range c.CustomRules {
+		if rule.Name == "" {
+			return fmt.Errorf("custom_rules[%d]: name is required", i)
+		}
+		if rule.Pattern == "" {
+			return fmt.Errorf("custom_rules[%d]: pattern is required", i)
+		}
+		switch strings.ToLower(rule.Severity) {
+		case "critical", "high", "medium", "low", "":
+		default:
+			return fmt.Errorf("custom_rules[%d]: invalid severity %s", i, rule.Severity)
+		}
+	}
+
 	return nil
 }
 
@@ -196,11 +252,12 @@ func (c *Config) Validate() error {
 // ToWalkOptions converts the config to artifact walker options.
 func (c *Config) ToWalkOptions(root string) artifacts.WalkOptions {
 	return artifacts.WalkOptions{
-		Root:           root,
-		IgnorePaths:    c.IgnorePaths,
-		MaxFileSize:    c.MaxFileSize,
-		FollowSymlinks: c.FollowSymlinks,
-		Extensions:     c.Extensions,
+		Root:             root,
+		IgnorePaths:      c.IgnorePaths,
+		MaxFileSize:      c.MaxFileSize,
+		FollowSymlinks:   c.FollowSymlinks,
+		Extensions:       c.Extensions,
+		RespectGitIgnore: c.RespectGitIgnore,
 	}
 }
 
@@ -211,6 +268,8 @@ func (c *Config) ToScanOptions() scanner.ScanOptions {
 		MLThreshold:        c.MLThreshold,
 		MinSeverity:        parseSeverity(c.MinSeverity),
 		MaxFindingsPerFile: c.MaxFindingsPerFile,
+		DisableRules:       c.DisableRules,
+		Concurrency:        0, // default sequential; CLI can override
 	}
 }
 
@@ -228,6 +287,24 @@ func parseSeverity(s string) detectors.Severity {
 	default:
 		return "" // no filter
 	}
+}
+
+// ToDetectorPatterns converts custom rule configs to detector PatternDef slice.
+func (c *Config) ToDetectorPatterns() []detectors.PatternDef {
+	if len(c.CustomRules) == 0 {
+		return nil
+	}
+	defs := make([]detectors.PatternDef, len(c.CustomRules))
+	for i, rule := range c.CustomRules {
+		defs[i] = detectors.PatternDef{
+			Name:        rule.Name,
+			Regex:       rule.Pattern,
+			Severity:    parseSeverity(rule.Severity),
+			Category:    detectors.Category(rule.Category),
+			Description: rule.Description,
+		}
+	}
+	return defs
 }
 
 // ---------------------------------------------------------------------
@@ -249,8 +326,22 @@ func parseSeverity(s string) detectors.Severity {
 func parseYAML(data []byte, cfg *Config) error {
 	lines := strings.Split(string(data), "\n")
 	currentKey := ""
+	var currentRule *CustomRuleConfig
+	inCustomRules := false
 
 	for _, rawLine := range lines {
+		// Compute indentation from the raw line before processing.
+		indent := 0
+		for _, c := range rawLine {
+			if c == ' ' {
+				indent++
+			} else if c == '\t' {
+				indent += 4 // treat tab as 4 spaces
+			} else {
+				break
+			}
+		}
+
 		line := rawLine
 
 		// Strip comments.
@@ -268,7 +359,36 @@ func parseYAML(data []byte, cfg *Config) error {
 			continue
 		}
 
-		// Block list item.
+		// Handle custom_rules block (list of maps).
+		if inCustomRules {
+			if indent == 0 {
+				// We've left the custom_rules block — finalize current rule.
+				if currentRule != nil {
+					cfg.CustomRules = append(cfg.CustomRules, *currentRule)
+					currentRule = nil
+				}
+				inCustomRules = false
+				// Fall through to normal processing below.
+			} else {
+				if strings.HasPrefix(line, "- ") {
+					// New custom rule entry.
+					if currentRule != nil {
+						cfg.CustomRules = append(cfg.CustomRules, *currentRule)
+					}
+					currentRule = &CustomRuleConfig{}
+					rest := strings.TrimSpace(line[2:])
+					if rest != "" {
+						parseCustomRuleKV(currentRule, rest)
+					}
+				} else if currentRule != nil {
+					// Property of the current custom rule.
+					parseCustomRuleKV(currentRule, line)
+				}
+				continue
+			}
+		}
+
+		// Block list item (string lists).
 		if strings.HasPrefix(line, "- ") {
 			item := strings.TrimSpace(line[2:])
 			item = unquote(item)
@@ -278,6 +398,8 @@ func parseYAML(data []byte, cfg *Config) error {
 					cfg.IgnorePaths = append(cfg.IgnorePaths, item)
 				case "extensions":
 					cfg.Extensions = append(cfg.Extensions, item)
+				case "disable_rules":
+					cfg.DisableRules = append(cfg.DisableRules, item)
 				}
 			}
 			continue
@@ -295,6 +417,9 @@ func parseYAML(data []byte, cfg *Config) error {
 
 		if value == "" {
 			// Block list or nested map — handled by subsequent lines.
+			if key == "custom_rules" {
+				inCustomRules = true
+			}
 			continue
 		}
 
@@ -306,6 +431,8 @@ func parseYAML(data []byte, cfg *Config) error {
 				cfg.IgnorePaths = append(cfg.IgnorePaths, items...)
 			case "extensions":
 				cfg.Extensions = append(cfg.Extensions, items...)
+			case "disable_rules":
+				cfg.DisableRules = append(cfg.DisableRules, items...)
 			}
 			continue
 		}
@@ -343,10 +470,44 @@ func parseYAML(data []byte, cfg *Config) error {
 			cfg.ColorOutput = parseBool(value)
 		case "model_path":
 			cfg.ModelPath = value
+		case "baseline_path":
+			cfg.BaselinePath = value
+		case "respect_gitignore":
+			cfg.RespectGitIgnore = parseBool(value)
+		case "fail_on_severity":
+			cfg.FailOnSeverity = value
 		}
 	}
 
+	// Finalize any pending custom rule at end of file.
+	if currentRule != nil {
+		cfg.CustomRules = append(cfg.CustomRules, *currentRule)
+	}
+
 	return nil
+}
+
+// parseCustomRuleKV parses a single key:value pair into a CustomRuleConfig.
+func parseCustomRuleKV(rule *CustomRuleConfig, kv string) {
+	idx := strings.Index(kv, ":")
+	if idx < 0 {
+		return
+	}
+	key := strings.TrimSpace(kv[:idx])
+	value := strings.TrimSpace(kv[idx+1:])
+	value = unquote(value)
+	switch key {
+	case "name":
+		rule.Name = value
+	case "pattern":
+		rule.Pattern = value
+	case "severity":
+		rule.Severity = value
+	case "category":
+		rule.Category = value
+	case "description":
+		rule.Description = value
+	}
 }
 
 // parseInlineList parses "[a, b, c]" into a slice of strings.

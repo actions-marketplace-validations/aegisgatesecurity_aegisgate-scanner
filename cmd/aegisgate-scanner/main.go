@@ -34,9 +34,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
+	"github.com/aegisgatesecurity/aegisgate-scanner/internal/detectors"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/artifacts"
+	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/baseline"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/config"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/output"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/scanner"
@@ -115,6 +118,18 @@ func runScan(args []string) int {
 	// Apply CLI overrides.
 	applyCLIOverrides(cfg, opts)
 
+	// Register custom rules from config.
+	if len(cfg.CustomRules) > 0 {
+		customDefs := cfg.ToDetectorPatterns()
+		if err := detectors.RegisterCustomPatterns(customDefs); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid custom rule: %v\n", err)
+			return exitError
+		}
+		if opts.verbose {
+			fmt.Fprintf(os.Stderr, "Registered %d custom rules\n", len(customDefs))
+		}
+	}
+
 	// Walk files.
 	walkResult, err := artifacts.Walk(cfg.ToWalkOptions(absRoot))
 	if err != nil {
@@ -132,6 +147,12 @@ func runScan(args []string) int {
 
 	// Create scanner.
 	scanOpts := cfg.ToScanOptions()
+
+	// Apply concurrency override from CLI.
+	if opts.concurrency > 0 {
+		scanOpts.Concurrency = opts.concurrency
+	}
+
 	sc, err := scanner.New(scanOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: scanner initialization failed: %v\n", err)
@@ -158,16 +179,58 @@ func runScan(args []string) int {
 	// Scan artifacts.
 	result := sc.ScanArtifacts(walkResult.Artifacts, scanOpts)
 
+	// Generate baseline mode: save current findings and exit.
+	if opts.generateBaseline != "" {
+		bl := baseline.FromScanResult(result)
+		if err := bl.Save(opts.generateBaseline); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to save baseline: %v\n", err)
+			return exitError
+		}
+		fmt.Fprintf(os.Stderr, "Baseline saved to %s (%d entries)\n", opts.generateBaseline, len(bl.Entries))
+		return exitOK
+	}
+
+	// Load and apply baseline suppression.
+	if cfg.BaselinePath != "" {
+		bl, err := baseline.Load(cfg.BaselinePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to load baseline: %v\n", err)
+			return exitError
+		}
+		filtered, suppressed := bl.Filter(result.Findings)
+		result.Findings = filtered
+		result.Stats.TotalFindings = len(filtered)
+		if suppressed > 0 && opts.verbose {
+			fmt.Fprintf(os.Stderr, "Suppressed %d findings via baseline\n", suppressed)
+		}
+	}
+
 	// Output results.
 	if err := outputResults(result, absRoot, cfg, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: output failed: %v\n", err)
 		return exitError
 	}
 
-	// Exit code based on findings.
+	// Exit code based on fail-on-severity.
 	if result.Stats.TotalFindings > 0 {
-		return exitFindings
+		failSeverity := cfg.FailOnSeverity
+		if failSeverity == "" {
+			failSeverity = "low"
+		}
+		// If fail-on is "low", any finding fails.
+		// If fail-on is "high", only high+critical fail.
+		rank := map[string]int{"critical": 4, "high": 3, "medium": 2, "low": 1}
+		minRank, ok := rank[strings.ToLower(failSeverity)]
+		if !ok {
+			minRank = 1 // default: any finding fails
+		}
+		for _, f := range result.Findings {
+			if r, ok := rank[strings.ToLower(string(f.Severity))]; ok && r >= minRank {
+				return exitFindings
+			}
+		}
 	}
+
 	return exitOK
 }
 
@@ -265,14 +328,19 @@ func printVersion() {
 
 // scanArgs holds parsed scan command arguments.
 type scanArgs struct {
-	path        string
-	format      string
-	output      string
-	minSeverity string
-	noML        bool
-	noColor     bool
-	quiet       bool
-	verbose     bool
+	path             string
+	format           string
+	output           string
+	minSeverity      string
+	noML             bool
+	noColor          bool
+	quiet            bool
+	verbose          bool
+	baseline         string
+	generateBaseline string
+	concurrency      int
+	failOn           string
+	disableRules     []string
 }
 
 func parseScanArgs(args []string) (*scanArgs, error) {
@@ -317,6 +385,64 @@ func parseScanArgs(args []string) (*scanArgs, error) {
 		case arg == "--verbose" || arg == "-v":
 			opts.verbose = true
 
+		case arg == "--baseline":
+			i++
+			if i >= len(args) {
+				return nil, fmt.Errorf("--baseline requires a value")
+			}
+			opts.baseline = args[i]
+
+		case strings.HasPrefix(arg, "--baseline="):
+			opts.baseline = strings.TrimPrefix(arg, "--baseline=")
+
+		case arg == "--generate-baseline":
+			i++
+			if i >= len(args) {
+				return nil, fmt.Errorf("--generate-baseline requires a value")
+			}
+			opts.generateBaseline = args[i]
+
+		case strings.HasPrefix(arg, "--generate-baseline="):
+			opts.generateBaseline = strings.TrimPrefix(arg, "--generate-baseline=")
+
+		case arg == "--concurrency":
+			i++
+			if i >= len(args) {
+				return nil, fmt.Errorf("--concurrency requires a value")
+			}
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 0 {
+				return nil, fmt.Errorf("--concurrency must be a non-negative integer")
+			}
+			opts.concurrency = n
+
+		case strings.HasPrefix(arg, "--concurrency="):
+			n, err := strconv.Atoi(strings.TrimPrefix(arg, "--concurrency="))
+			if err != nil || n < 0 {
+				return nil, fmt.Errorf("--concurrency must be a non-negative integer")
+			}
+			opts.concurrency = n
+
+		case arg == "--fail-on":
+			i++
+			if i >= len(args) {
+				return nil, fmt.Errorf("--fail-on requires a value")
+			}
+			opts.failOn = args[i]
+
+		case strings.HasPrefix(arg, "--fail-on="):
+			opts.failOn = strings.TrimPrefix(arg, "--fail-on=")
+
+		case arg == "--disable-rule":
+			i++
+			if i >= len(args) {
+				return nil, fmt.Errorf("--disable-rule requires a value")
+			}
+			opts.disableRules = append(opts.disableRules, args[i])
+
+		case strings.HasPrefix(arg, "--disable-rule="):
+			opts.disableRules = append(opts.disableRules, strings.TrimPrefix(arg, "--disable-rule="))
+
 		case strings.HasPrefix(arg, "--format="):
 			opts.format = strings.TrimPrefix(arg, "--format=")
 
@@ -358,6 +484,15 @@ func applyCLIOverrides(cfg *config.Config, opts *scanArgs) {
 	}
 	if opts.noColor {
 		cfg.ColorOutput = false
+	}
+	if opts.baseline != "" {
+		cfg.BaselinePath = opts.baseline
+	}
+	if opts.failOn != "" {
+		cfg.FailOnSeverity = opts.failOn
+	}
+	if len(opts.disableRules) > 0 {
+		cfg.DisableRules = append(cfg.DisableRules, opts.disableRules...)
 	}
 }
 
