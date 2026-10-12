@@ -98,6 +98,9 @@ RUN apt-get update && \
 # Copy the scanner binary.
 COPY --from=builder /aegisgate-scanner /app/aegisgate-scanner
 
+# Copy the GitHub Action entrypoint script.
+COPY entrypoint.sh /entrypoint.sh
+
 # Copy the vendored ONNX Runtime shared library for the target arch.
 COPY --from=builder /build/lib/${TARGETARCH}/libonnxruntime.so /app/lib/libonnxruntime.so
 COPY --from=builder /build/lib/${TARGETARCH}/libonnxruntime.so.1 /app/lib/libonnxruntime.so.1
@@ -118,7 +121,7 @@ USER scanner
 # No EXPOSE — CLI tool, not a server.
 # No HEALTHCHECK — CLI invocation is ephemeral.
 
-ENTRYPOINT ["/app/aegisgate-scanner"]
+ENTRYPOINT ["/entrypoint.sh"]
 
 # ---------------------------------------------------------------------------
 # Builder stage (lite): CGO_ENABLED=0 for pure static binary.

@@ -21,11 +21,6 @@
 #
 # ---
 #
-# Optional inputs `no-ml` and `config` are declared below for documentation
-# and future use. Docker action args are static (no conditional support), so
-# the core args (scan, path, format, severity, output) are passed to the CLI.
-# See the README for instructions on using --no-ml and --config directly.
-#
 # The `fail-on-findings` input is handled via the CLI exit code:
 #   - Exit code 1 = findings detected → workflow fails
 #   - Exit code 0 = clean → workflow continues
@@ -39,11 +34,9 @@
 #
 # ---
 #
-# Since Docker actions do not support `runs.using: composite` post-run
-# steps, users must manually upload the SARIF file in their workflow
-# using github/codeql-action/upload-sarif@v4 as shown in the example above.
-# The report is written to `/github/workspace/aegisgate-report.<format>`
-# (e.g., `aegisgate-report.sarif`).
+# Advanced options (no-ml, diff, baseline, disable-rule, concurrency,
+# no-extract-archives, quiet) are supported via the entrypoint script.
+# See the README for full CLI documentation.
 
 name: 'AegisGate Scanner'
 description: 'Static analysis for AI artifacts — detect prompt injection, PII, secrets, and compliance violations in RAG docs, training data, model configs, and agent skills'
@@ -57,7 +50,7 @@ inputs:
     required: false
     default: '.'
   format:
-    description: 'Output format (sarif, json, text)'
+    description: 'Output format (sarif, json, text, html, pr-comment, github-actions, sbom)'
     required: false
     default: 'sarif'
   severity:
@@ -65,13 +58,33 @@ inputs:
     required: false
     default: 'medium'
   no-ml:
-    description: 'Disable ML detection (heuristic-only). See README for usage with --no-ml flag.'
+    description: 'Disable ML detection (heuristic-only)'
     required: false
     default: 'false'
-  config:
-    description: 'Path to .aegisgate.yml config file. See README for usage with --config flag.'
+  diff:
+    description: 'Base branch for diff scanning (e.g., main). Only scans changed files.'
     required: false
     default: ''
+  baseline:
+    description: 'Path to baseline suppression file'
+    required: false
+    default: ''
+  disable-rule:
+    description: 'Comma-separated list of rule IDs to disable (e.g., "xss_stored_basic,secret_aws_key")'
+    required: false
+    default: ''
+  concurrency:
+    description: 'Number of parallel workers (default: auto-detect)'
+    required: false
+    default: ''
+  no-extract-archives:
+    description: 'Disable automatic archive extraction'
+    required: false
+    default: 'false'
+  quiet:
+    description: 'Suppress output (exit code only)'
+    required: false
+    default: 'false'
   fail-on-findings:
     description: 'Fail the workflow if findings are detected (exit code 1). Set to "false" and use continue-on-error: true to ignore.'
     required: false
@@ -80,12 +93,15 @@ inputs:
 runs:
   using: 'docker'
   image: 'Dockerfile'
-  args:
-    - 'scan'
-    - ${{ inputs.path }}
-    - '--format'
-    - ${{ inputs.format }}
-    - '--severity'
-    - ${{ inputs.severity }}
-    - '--output'
-    - '/github/workspace/aegisgate-report.${{ inputs.format }}'
+  entrypoint: '/entrypoint.sh'
+  env:
+    INPUT_PATH: ${{ inputs.path }}
+    INPUT_FORMAT: ${{ inputs.format }}
+    INPUT_SEVERITY: ${{ inputs.severity }}
+    INPUT_NO_ML: ${{ inputs.no-ml }}
+    INPUT_DIFF: ${{ inputs.diff }}
+    INPUT_BASELINE: ${{ inputs.baseline }}
+    INPUT_DISABLE_RULE: ${{ inputs.disable-rule }}
+    INPUT_CONCURRENCY: ${{ inputs.concurrency }}
+    INPUT_NO_EXTRACT_ARCHIVES: ${{ inputs.no-extract-archives }}
+    INPUT_QUIET: ${{ inputs.quiet }}
