@@ -1323,3 +1323,51 @@ func abs(x float64) float64 {
 	}
 	return x
 }
+
+func TestLoadFile_ValidConfig(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "custom.yml")
+	content := `min_severity: high
+enable_ml: false
+output_format: json
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFile(configPath)
+	if err != nil {
+		t.Fatalf("LoadFile error: %v", err)
+	}
+	if cfg.MinSeverity != "high" {
+		t.Errorf("MinSeverity = %q, want 'high'", cfg.MinSeverity)
+	}
+	if cfg.EnableML != false {
+		t.Errorf("EnableML = %v, want false", cfg.EnableML)
+	}
+	if cfg.OutputFormat != "json" {
+		t.Errorf("OutputFormat = %q, want 'json'", cfg.OutputFormat)
+	}
+}
+
+func TestLoadFile_NonexistentFile(t *testing.T) {
+	_, err := LoadFile("/nonexistent/path/to/config.yml")
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+func TestLoadFile_InvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "bad.yml")
+	// Invalid output_format triggers Validate() error.
+	content := "output_format: invalid_format\n"
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadFile(configPath)
+	if err == nil {
+		t.Error("expected error for invalid output_format in config")
+	}
+}
