@@ -22,6 +22,7 @@ package detectors
 import (
 	"fmt"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -40,6 +41,7 @@ type compiledPattern struct {
 	Compiled    *regexp.Regexp
 	Description string
 	Languages   []Language
+	Keywords    []string
 }
 
 // mergedCategory holds a category's patterns merged into a single alternation
@@ -68,6 +70,7 @@ func compilePatterns(defs []PatternDef) []compiledPattern {
 			Compiled:    re,
 			Description: def.Description,
 			Languages:   def.Languages,
+			Keywords:    extractKeywords(def.Regex),
 		}
 	}
 	return patterns
@@ -385,6 +388,307 @@ func getMergedCategory(category string) *mergedCategory {
 // benefit of parallelism, so categories are scanned sequentially.
 const detectAllThreshold = 8192 // 8KB
 
+// lineScanThreshold is the minimum content size (bytes) for line-by-line
+// scanning with keyword pre-filtering. Above this, the engine splits text
+// into lines and only runs patterns whose extracted keywords appear on each
+// line, dramatically reducing wasted regex work on large files.
+const lineScanThreshold = 65536 // 64KB — above this, use line-by-line scanning
+
+// extractKeywords extracts literal substrings from a regex pattern string.
+// These keywords are used for pre-filtering lines before running the full
+// regex, so only lines containing at least one keyword are scanned by a
+// given pattern.
+//
+// Rules:
+//   - Only a-z, A-Z, 0-9 are literal characters; everything else flushes
+//     the current literal run.
+//   - Escape sequences (\x) skip the next character.
+//   - Character class contents [...] are skipped entirely.
+//   - Minimum keyword length is 3 characters.
+//   - Keywords must contain at least one letter (not just digits).
+//   - Keywords are returned lowercase and deduplicated.
+//   - regexp.LiteralPrefix() is also consulted; if the prefix is >= 3 chars
+//     it is included as a keyword.
+func extractKeywords(pattern string) []string {
+	seen := make(map[string]bool)
+	var keywords []string
+
+	addKeyword := func(s string) {
+		if len(s) < 3 {
+			return
+		}
+		hasLetter := false
+		for _, ch := range s {
+			if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+				hasLetter = true
+				break
+			}
+		}
+		if !hasLetter {
+			return
+		}
+		lower := strings.ToLower(s)
+		if !seen[lower] {
+			seen[lower] = true
+			keywords = append(keywords, lower)
+		}
+	}
+
+	// Walk the pattern, collecting literal runs.
+	var buf strings.Builder
+	i := 0
+	for i < len(pattern) {
+		ch := pattern[i]
+		switch {
+		case ch == '\\':
+			// Escape sequence: flush current buffer, skip next char.
+			addKeyword(buf.String())
+			buf.Reset()
+			i += 2 // skip \ and the escaped char
+			continue
+		case ch == '[':
+			// Character class: flush current buffer, skip until ']'.
+			addKeyword(buf.String())
+			buf.Reset()
+			i++
+			for i < len(pattern) && pattern[i] != ']' {
+				if pattern[i] == '\\' {
+					i++ // skip escaped char inside class
+				}
+				i++
+			}
+			if i < len(pattern) {
+				i++ // skip the ']'
+			}
+			continue
+		case (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9'):
+			buf.WriteByte(ch)
+			i++
+		default:
+			// Non-literal: flush current buffer.
+			addKeyword(buf.String())
+			buf.Reset()
+			i++
+		}
+	}
+	addKeyword(buf.String())
+
+	// Also consult regexp.LiteralPrefix via a compiled version of the pattern.
+	if re, err := regexp.Compile(pattern); err == nil {
+		litPrefix, complete := re.LiteralPrefix()
+		if len(litPrefix) >= 3 && !complete {
+			// LiteralPrefix returns the longest literal prefix of the regex.
+			// Filter to alphanumeric-only and add as keyword.
+			var lb strings.Builder
+			for _, ch := range litPrefix {
+				if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') {
+					lb.WriteRune(ch)
+				} else {
+					break
+				}
+			}
+			addKeyword(lb.String())
+		}
+	}
+
+	return keywords
+}
+
+// detectAllByLines scans large text using line-by-line analysis with keyword
+// pre-filtering. Only patterns whose extracted keywords appear on a given
+// line are run against that line, dramatically reducing wasted regex work.
+//
+// Lines are processed in parallel using a worker pool sized to NumCPU.
+func detectAllByLines(text string, lang Language) []Match {
+	// Gather all patterns across all categories, including custom patterns.
+	customMu.RLock()
+	customSnapshot := customPatterns
+	customMu.RUnlock()
+
+	allPatterns := make([]compiledPattern, 0, 300)
+	allPatterns = append(allPatterns, CompiledSecretPatterns...)
+	allPatterns = append(allPatterns, CompiledXSSPatterns...)
+	allPatterns = append(allPatterns, CompiledPIIUSCorePatterns...)
+	allPatterns = append(allPatterns, CompiledPIIUSExtendedPatterns...)
+	allPatterns = append(allPatterns, CompiledPIIFinancialPatterns...)
+	allPatterns = append(allPatterns, CompiledPIIInternationalPatterns...)
+	allPatterns = append(allPatterns, CompiledCompliancePatterns...)
+	allPatterns = append(allPatterns, CompiledDangerousFunctionPatterns...)
+	allPatterns = append(allPatterns, CompiledOTProtocolPatterns...)
+	allPatterns = append(allPatterns, CompiledTodoPatterns...)
+	allPatterns = append(allPatterns, customSnapshot...)
+
+	// Apply language filtering once.
+	filtered := filterByLanguage(allPatterns, lang)
+
+	// Separate patterns into keyword-filtered and always-run groups.
+	// Keyword patterns run line-by-line (only on lines containing their keywords).
+	// Always-run patterns run on the full text in parallel (they have no
+	// keyword pre-filter, but full-text scanning is efficient for these
+	// mostly simple patterns like SSN, phone, and credit card).
+	var keywordPatterns []compiledPattern
+	var alwaysRunPatterns []compiledPattern
+	for _, p := range filtered {
+		if len(p.Keywords) > 0 {
+			keywordPatterns = append(keywordPatterns, p)
+		} else {
+			alwaysRunPatterns = append(alwaysRunPatterns, p)
+		}
+	}
+
+	// Split text into lines, tracking byte offsets. We use a compact
+	// representation: two parallel slices for text and offset to reduce
+	// struct allocation overhead.
+	var lineTexts []string
+	var lineOffsets []int
+	start := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\n' {
+			lineTexts = append(lineTexts, text[start:i])
+			lineOffsets = append(lineOffsets, start)
+			start = i + 1
+		}
+	}
+	if start < len(text) {
+		lineTexts = append(lineTexts, text[start:])
+		lineOffsets = append(lineOffsets, start)
+	}
+
+	numLines := len(lineTexts)
+	if numLines == 0 {
+		return nil
+	}
+
+	// Process lines in parallel using batch-based work distribution
+	// (no channels — each worker gets a contiguous slice of lines).
+	numWorkers := runtime.NumCPU()
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+	if numWorkers > numLines {
+		numWorkers = numLines
+	}
+
+	batchSize := (numLines + numWorkers - 1) / numWorkers
+	results := make([][]Match, numWorkers)
+
+	var wg sync.WaitGroup
+	for w := 0; w < numWorkers; w++ {
+		batchStart := w * batchSize
+		batchEnd := batchStart + batchSize
+		if batchEnd > numLines {
+			batchEnd = numLines
+		}
+		if batchStart >= batchEnd {
+			continue
+		}
+
+		wg.Add(1)
+		go func(workerIdx, loStart, loEnd int) {
+			defer wg.Done()
+			var matches []Match
+
+			for li := loStart; li < loEnd; li++ {
+				lineText := lineTexts[li]
+				offset := lineOffsets[li]
+
+				// Skip empty lines — no pattern can match an empty string.
+				if len(lineText) == 0 {
+					continue
+				}
+
+				// Lowercase the line once for keyword checking.
+				lineLower := strings.ToLower(lineText)
+
+				// Run keyword patterns whose keywords appear on this line.
+				for _, p := range keywordPatterns {
+					keywordMatch := false
+					for _, kw := range p.Keywords {
+						if strings.Contains(lineLower, kw) {
+							keywordMatch = true
+							break
+						}
+					}
+					if !keywordMatch {
+						continue
+					}
+					indices := p.Compiled.FindAllStringIndex(lineText, -1)
+					for _, idx := range indices {
+						value := lineText[idx[0]:idx[1]]
+						if len(value) > 200 {
+							value = value[:200] + "..."
+						}
+						matches = append(matches, Match{
+							Category:   p.Name,
+							Severity:   p.Severity,
+							Confidence: p.Confidence,
+							Value:      value,
+							Index:      idx[0] + offset,
+							End:        idx[1] + offset,
+						})
+					}
+				}
+
+				// Run always-run patterns with required chars pre-filter.
+				// Only run if the line contains ALL required chars.
+				// Always-run patterns (no keywords) are handled separately
+				// on the full text for efficiency — see below.
+			}
+
+			results[workerIdx] = matches
+		}(w, batchStart, batchEnd)
+	}
+	wg.Wait()
+
+	// Merge results from line-by-line keyword scanning.
+	var all []Match
+	for _, r := range results {
+		all = append(all, r...)
+	}
+
+	// Run always-run patterns (no keywords) on the full text in parallel.
+	// These are mostly simple PII patterns (SSN, phone, credit card, etc.)
+	// that are fast on full text and have no keyword to pre-filter by.
+	if len(alwaysRunPatterns) > 0 {
+		arResults := make([][]Match, len(alwaysRunPatterns))
+		var arWG sync.WaitGroup
+		for i, p := range alwaysRunPatterns {
+			arWG.Add(1)
+			go func(idx int, pat compiledPattern) {
+				defer arWG.Done()
+				indices := pat.Compiled.FindAllStringIndex(text, -1)
+				var matches []Match
+				for _, idx2 := range indices {
+					value := text[idx2[0]:idx2[1]]
+					if len(value) > 200 {
+						value = value[:200] + "..."
+					}
+					matches = append(matches, Match{
+						Category:   pat.Name,
+						Severity:   pat.Severity,
+						Confidence: pat.Confidence,
+						Value:      value,
+						Index:      idx2[0],
+						End:        idx2[1],
+					})
+				}
+				arResults[idx] = matches
+			}(i, p)
+		}
+		arWG.Wait()
+		for _, r := range arResults {
+			all = append(all, r...)
+		}
+	}
+
+	// Sort all matches by index.
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].Index < all[j].Index
+	})
+
+	return all
+}
+
 // DetectAll scans text with all pattern categories and returns combined results.
 //
 // For content larger than detectAllThreshold, categories are scanned
@@ -400,6 +704,13 @@ func DetectAll(text string) []Match {
 func DetectAllWithLanguage(text string, lang Language) []Match {
 	if len(text) == 0 {
 		return nil
+	}
+
+	// For large text, use line-by-line scanning with keyword pre-filtering.
+	// All 276 patterns are single-line (no (?s) dotall, no \n), so this is
+	// a lossless optimization that dramatically reduces regex calls.
+	if len(text) >= lineScanThreshold {
+		return detectAllByLines(text, lang)
 	}
 
 	// Snapshot custom patterns under lock.

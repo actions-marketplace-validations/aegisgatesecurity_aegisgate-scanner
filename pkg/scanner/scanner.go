@@ -23,6 +23,7 @@ package scanner
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -526,17 +527,39 @@ func byteOffsetToLineCol(content string, offset int) (line, col int) {
 		offset = len(content)
 	}
 
-	line = 1
-	col = 1
-	for i := 0; i < offset; i++ {
-		if content[i] == '\n' {
-			line++
-			col = 1
-		} else {
-			col++
-		}
+	// Binary search on precomputed newline positions for O(log n) lookup.
+	// This replaces the original O(n) linear scan that dominated CPU time
+	// on large files with many findings.
+	newlines := getNewlinePositions(content)
+	idx := sort.SearchInts(newlines, offset)
+	line = idx + 1
+	if idx == 0 {
+		col = offset + 1
+	} else {
+		col = offset - newlines[idx-1]
 	}
 	return line, col
+}
+
+// newlineCache caches newline position slices by content to avoid
+// recomputing for the same content (e.g., when called for both Index and End).
+var newlineCache sync.Map
+
+func getNewlinePositions(content string) []int {
+	// Check cache first.
+	if v, ok := newlineCache.Load(content); ok {
+		return v.([]int)
+	}
+
+	var positions []int
+	for i := 0; i < len(content); i++ {
+		if content[i] == '\n' {
+			positions = append(positions, i)
+		}
+	}
+
+	newlineCache.Store(content, positions)
+	return positions
 }
 
 // truncate shortens a string to maxLen characters, appending "..." if truncated.
