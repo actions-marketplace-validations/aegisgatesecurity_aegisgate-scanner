@@ -35,6 +35,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -84,6 +85,8 @@ func run(argv []string) int {
 		return exitOK
 	case "update":
 		return runUpdate(args)
+	case "doctor":
+		return runDoctor(args)
 	case "help", "--help", "-h":
 		printUsage()
 		return exitOK
@@ -435,6 +438,154 @@ func printVersion() {
 	fmt.Printf("  go: %s\n", runtime.Version())
 	fmt.Printf("  platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Printf("  cgo: %v\n", isCGOEnabled())
+}
+
+// ---------------------------------------------------------------------
+// doctor command — self-test / health check
+// ---------------------------------------------------------------------
+
+// runDoctor performs a self-test: scans the specified directory (or
+// current directory), verifies the binary works, and reports a health
+// summary. Useful for post-install verification, conference demos, and
+// CI smoke tests.
+func runDoctor(args []string) int {
+	scanPath := "."
+	if len(args) > 0 && args[0] != "" && !strings.HasPrefix(args[0], "-") {
+		scanPath = args[0]
+	}
+
+	absPath, _ := filepath.Abs(scanPath)
+
+	fmt.Printf("AegisGate Scanner v%s — Doctor\n", Version)
+	fmt.Println(strings.Repeat("=", 50))
+	fmt.Println()
+
+	// 1. Binary info
+	fmt.Printf("📋 Binary\n")
+	fmt.Printf("  version:  %s\n", Version)
+	fmt.Printf("  go:       %s\n", runtime.Version())
+	fmt.Printf("  platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Printf("  cgo:      %v\n", isCGOEnabled())
+	fmt.Println()
+
+	// 2. Config check
+	fmt.Printf("⚙️  Configuration\n")
+	cfg, err := config.Load(".")
+	if err != nil {
+		fmt.Printf("  ⚠️  config load: %v (using defaults)\n", err)
+		cfg = config.Default()
+	} else {
+		fmt.Printf("  ✅ config loaded from .aegisgate.yml\n")
+	}
+	fmt.Printf("  output_format:  %s\n", cfg.OutputFormat)
+	fmt.Printf("  min_severity:   %s\n", cfg.MinSeverity)
+	fmt.Printf("  enable_ml:      %v\n", cfg.EnableML)
+	fmt.Println()
+
+	// 3. Self-scan
+	fmt.Printf("🔍 Self-scan: %s\n", absPath)
+	walkResult, err := artifacts.Walk(cfg.ToWalkOptions(absPath))
+	if err != nil {
+		fmt.Printf("  ❌ file walk failed: %v\n", err)
+		return exitError
+	}
+
+	// Check if path exists.
+	if _, statErr := os.Stat(absPath); statErr != nil {
+		fmt.Printf("  ❌ path does not exist: %s\n", absPath)
+		return exitError
+	}
+
+	scanOpts := cfg.ToScanOptions()
+	sc, err := scanner.New(scanOpts)
+	if err != nil {
+		fmt.Printf("  ❌ scanner init failed: %v\n", err)
+		return exitError
+	}
+	defer sc.Close()
+
+	// Load ML model if enabled.
+	if cfg.EnableML {
+		defaultPath := findDefaultModelPath()
+		if defaultPath != "" {
+			if err := sc.LoadModel(defaultPath); err != nil {
+				fmt.Printf("  ⚠️  ML model load failed: %v (continuing regex-only)\n", err)
+			} else {
+				fmt.Printf("  ✅ ML model loaded\n")
+			}
+		}
+	}
+
+	result := sc.ScanArtifacts(walkResult.Artifacts, scanOpts)
+
+	fmt.Printf("  files scanned:     %d\n", result.Stats.FilesScanned)
+	fmt.Printf("  files w/ findings: %d\n", result.Stats.FilesWithFindings)
+	fmt.Printf("  total findings:    %d\n", result.Stats.TotalFindings)
+	fmt.Printf("  duration:          %v\n", result.Duration)
+
+	if len(result.Stats.BySeverity) > 0 {
+		fmt.Printf("  by severity:       ")
+		first := true
+		for _, sev := range []string{"critical", "high", "medium", "low"} {
+			if count, ok := result.Stats.BySeverity[detectors.Severity(sev)]; ok && count > 0 {
+				if !first {
+					fmt.Printf(", ")
+				}
+				fmt.Printf("%s=%d", sev, count)
+				first = false
+			}
+		}
+		fmt.Println()
+	}
+
+	if len(result.Stats.ByCategory) > 0 {
+		fmt.Printf("  by category:       ")
+		cats := make([]string, 0, len(result.Stats.ByCategory))
+		for cat := range result.Stats.ByCategory {
+			cats = append(cats, cat)
+		}
+		sort.Strings(cats)
+		for i, cat := range cats {
+			if i > 0 {
+				fmt.Printf(", ")
+			}
+			fmt.Printf("%s=%d", cat, result.Stats.ByCategory[cat])
+		}
+		fmt.Println()
+	}
+
+	if result.Stats.MLInferences > 0 {
+		fmt.Printf("  ml inferences:     %d\n", result.Stats.MLInferences)
+	}
+	fmt.Println()
+
+	// 4. Pattern counts
+	fmt.Printf("🛡️  Detection Patterns\n")
+	fmt.Printf("  secrets:             %d\n", len(detectors.SecretsPatterns))
+	fmt.Printf("  pii-us-core:         %d\n", len(detectors.PIIUSCorePatterns))
+	fmt.Printf("  pii-us-extended:     %d\n", len(detectors.PIIUSExtendedPatterns))
+	fmt.Printf("  pii-financial:       %d\n", len(detectors.PIIFinancialPatterns))
+	fmt.Printf("  pii-international:   %d\n", len(detectors.PIIInternationalPatterns))
+	fmt.Printf("  dangerous-functions: %d\n", len(detectors.DangerousFunctionPatterns))
+	fmt.Printf("  compliance:          %d\n", len(detectors.CompliancePatterns))
+	fmt.Printf("  xss:                 %d\n", len(detectors.XSSPatterns))
+	fmt.Printf("  ot-protocols:        %d\n", len(detectors.OTProtocolPatterns))
+	fmt.Printf("  technical-debt:      %d\n", len(detectors.TodoPatterns))
+
+	totalPatterns := len(detectors.SecretsPatterns) + len(detectors.PIIUSCorePatterns) +
+		len(detectors.PIIUSExtendedPatterns) + len(detectors.PIIFinancialPatterns) +
+		len(detectors.PIIInternationalPatterns) + len(detectors.DangerousFunctionPatterns) +
+		len(detectors.CompliancePatterns) + len(detectors.XSSPatterns) +
+		len(detectors.OTProtocolPatterns) + len(detectors.TodoPatterns)
+	fmt.Printf("  total:               %d\n", totalPatterns)
+	fmt.Println()
+
+	// 5. Verdict
+	fmt.Printf("✅ aegisgate-scanner is operational.\n")
+	fmt.Printf("   Scanned %d files in %v with %d findings.\n",
+		result.Stats.FilesScanned, result.Duration, result.Stats.TotalFindings)
+
+	return exitOK
 }
 
 // ---------------------------------------------------------------------
@@ -939,6 +1090,7 @@ Commands:
   init [dir]     Create a .aegisgate.yml configuration file
   version        Print version information
   update         Check for and install updates
+  doctor [path]  Self-test: scan own codebase and report health
   help           Show this help message
 
 Scan Options:

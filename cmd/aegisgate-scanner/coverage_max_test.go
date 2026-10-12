@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1568,5 +1569,105 @@ func TestOutputResults_SarifError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown output format") {
 		t.Errorf("expected 'unknown output format', got: %v", err)
+	}
+}
+
+// TestRunScan_JSONLOutputToFile verifies JSONL output via runScan (not stdin).
+func TestRunScan_JSONLOutputToFile(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("AKIAIOSFODNN7EXAMPLE"), 0644)
+
+	outFile := filepath.Join(dir, "..", "results.jsonl")
+	absOut, _ := filepath.Abs(outFile)
+
+	exitCode := run([]string{"aegisgate-scanner", "scan", dir, "--no-ml", "--quiet",
+		"--format", "jsonl", "--output", absOut})
+
+	if exitCode != exitFindings {
+		t.Errorf("exit code = %d, want %d", exitCode, exitFindings)
+	}
+	data, err := os.ReadFile(absOut)
+	if err != nil {
+		t.Fatalf("output file not created: %v", err)
+	}
+	if !strings.Contains(string(data), "\"type\":\"finding\"") {
+		t.Errorf("expected JSONL with finding objects, got: %s", string(data)[:min(200, len(data))])
+	}
+	if !strings.Contains(string(data), "\"type\":\"summary\"") {
+		t.Errorf("expected JSONL with summary object")
+	}
+}
+
+// TestRunScan_JSONLOutputToStdout verifies JSONL output to stdout via runScan.
+func TestRunScan_JSONLOutputToStdout(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("AKIAIOSFODNN7EXAMPLE"), 0644)
+
+	// Capture stdout.
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	exitCode := run([]string{"aegisgate-scanner", "scan", dir, "--no-ml",
+		"--format", "jsonl"})
+
+	w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+
+	if exitCode != exitFindings {
+		t.Errorf("exit code = %d, want %d", exitCode, exitFindings)
+	}
+	if !strings.Contains(string(out), "\"type\":\"finding\"") {
+		t.Errorf("expected JSONL output with findings")
+	}
+}
+
+// TestRunScan_SBOMOutputToStdout verifies SBOM output to stdout via runScan.
+func TestRunScan_SBOMOutputToStdout(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("AKIAIOSFODNN7EXAMPLE"), 0644)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode := run([]string{"aegisgate-scanner", "scan", dir, "--no-ml",
+		"--format", "sbom"})
+
+	w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+
+	if exitCode != exitFindings {
+		t.Errorf("exit code = %d, want %d", exitCode, exitFindings)
+	}
+	if !strings.Contains(string(out), "sbom") {
+		t.Errorf("expected SBOM output, got: %s", string(out)[:min(200, len(out))])
+	}
+}
+
+// TestRunScan_HTMLOutputToStdout verifies HTML output to stdout via runScan.
+func TestRunScan_HTMLOutputToStdout(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "test.txt"), []byte("AKIAIOSFODNN7EXAMPLE"), 0644)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	exitCode := run([]string{"aegisgate-scanner", "scan", dir, "--no-ml",
+		"--format", "html"})
+
+	w.Close()
+	os.Stdout = oldStdout
+	out, _ := io.ReadAll(r)
+
+	if exitCode != exitFindings {
+		t.Errorf("exit code = %d, want %d", exitCode, exitFindings)
+	}
+	if !strings.Contains(string(out), "<html") {
+		t.Errorf("expected HTML output, got: %s", string(out)[:min(200, len(out))])
 	}
 }
