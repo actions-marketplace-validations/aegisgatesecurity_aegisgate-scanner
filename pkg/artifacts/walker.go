@@ -747,3 +747,79 @@ func getInode(info fs.FileInfo) (uint64, bool) {
 	}
 	return 0, false
 }
+
+// ---------------------------------------------------------------------
+// Stdin / direct content support
+// ---------------------------------------------------------------------
+
+// ReadArtifactFromContent creates an Artifact from raw content bytes.
+// This is used for stdin/pipe scanning where there is no file on disk.
+// The path is used for classification and reporting (e.g., "stdin").
+func ReadArtifactFromContent(path string, content []byte) Artifact {
+	// Strip UTF-8 BOM if present.
+	text := strings.TrimPrefix(string(content), "\xEF\xBB\xBF")
+
+	// Count lines.
+	lines := strings.Count(text, "\n")
+	if len(text) > 0 && !strings.HasSuffix(text, "\n") {
+		lines++
+	}
+
+	// Check for binary content.
+	binary := isBinaryContent(content)
+
+	art := Artifact{
+		Path:    path,
+		AbsPath: path,
+		Class:   ClassifyFile(path),
+		Size:    int64(len(content)),
+		Content: text,
+		Lines:   lines,
+		Binary:  binary,
+	}
+
+	if binary {
+		art.Skipped = "binary content detected"
+		art.Content = ""
+	}
+
+	return art
+}
+
+// isBinaryContent checks whether raw byte content appears to be binary.
+// Uses the same heuristics as isBinary but operates on in-memory data.
+func isBinaryContent(content []byte) bool {
+	n := len(content)
+	if n == 0 {
+		return false
+	}
+
+	// Sample up to binaryCheckBytes bytes.
+	sample := content
+	if n > binaryCheckBytes {
+		sample = content[:binaryCheckBytes]
+	}
+
+	// Null byte → binary.
+	for _, b := range sample {
+		if b == 0 {
+			return true
+		}
+	}
+
+	// Check for high proportion of non-text bytes.
+	nonText := 0
+	for _, b := range sample {
+		if b < 0x09 || (b > 0x0D && b < 0x20) {
+			nonText++
+		}
+	}
+
+	// If more than 30% non-text bytes in the sample, treat as binary.
+	sn := len(sample)
+	if sn > 0 && nonText*100/sn > 30 {
+		return true
+	}
+
+	return false
+}

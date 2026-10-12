@@ -31,11 +31,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aegisgatesecurity/aegisgate-scanner/internal/detectors"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/artifacts"
@@ -93,6 +95,11 @@ func runScan(args []string) int {
 		fmt.Fprintf(os.Stderr, "Error: %v\n\n", err)
 		printScanUsage()
 		return exitError
+	}
+
+	// Handle stdin/pipe mode: path is "-"
+	if opts.path == "-" {
+		return runScanStdin(opts)
 	}
 
 	// Determine scan root.
@@ -174,6 +181,11 @@ func runScan(args []string) int {
 				fmt.Fprintf(os.Stderr, "Warning: ML model load failed: %v (continuing with regex-only)\n", err)
 			}
 		}
+	}
+
+	// Set up progress indicator for large scans (stderr, non-TTY safe).
+	if !opts.quiet && len(walkResult.Artifacts) > 10 {
+		scanOpts.Progress = makeProgressFunc(os.Stderr, len(walkResult.Artifacts))
 	}
 
 	// Scan artifacts.
@@ -341,6 +353,7 @@ type scanArgs struct {
 	concurrency      int
 	failOn           string
 	disableRules     []string
+	stdinExt         string
 }
 
 func parseScanArgs(args []string) (*scanArgs, error) {
@@ -443,6 +456,16 @@ func parseScanArgs(args []string) (*scanArgs, error) {
 		case strings.HasPrefix(arg, "--disable-rule="):
 			opts.disableRules = append(opts.disableRules, strings.TrimPrefix(arg, "--disable-rule="))
 
+		case arg == "--stdin-ext":
+			i++
+			if i >= len(args) {
+				return nil, fmt.Errorf("--stdin-ext requires a value")
+			}
+			opts.stdinExt = args[i]
+
+		case strings.HasPrefix(arg, "--stdin-ext="):
+			opts.stdinExt = strings.TrimPrefix(arg, "--stdin-ext=")
+
 		case strings.HasPrefix(arg, "--format="):
 			opts.format = strings.TrimPrefix(arg, "--format=")
 
@@ -455,6 +478,14 @@ func parseScanArgs(args []string) (*scanArgs, error) {
 		case arg == "--help" || arg == "-h":
 			printScanUsage()
 			os.Exit(exitOK)
+
+		case arg == "-":
+			// "-" as path means read from stdin/pipe.
+			if opts.path == "" {
+				opts.path = "-"
+			} else {
+				return nil, fmt.Errorf("unexpected argument: %s", arg)
+			}
 
 		case !strings.HasPrefix(arg, "-"):
 			if opts.path == "" {
@@ -551,6 +582,159 @@ func outputResults(result *scanner.ScanResult, root string, cfg *config.Config, 
 // Helpers
 // ---------------------------------------------------------------------
 
+// runScanStdin reads content from stdin, creates an artifact, and scans it.
+// The file extension for classification is determined by --stdin-ext flag
+// (defaults to .txt if not specified).
+func runScanStdin(opts *scanArgs) int {
+	// Read all of stdin.
+	content, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to read stdin: %v\n", err)
+		return exitError
+	}
+
+	if len(content) == 0 {
+		fmt.Fprintf(os.Stderr, "Error: no content received on stdin\n")
+		return exitError
+	}
+
+	// Determine file extension for classification.
+	ext := opts.stdinExt
+	if ext == "" {
+		ext = ".txt"
+	}
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+
+	// Create artifact from stdin content.
+	artPath := "stdin" + ext
+	art := artifacts.ReadArtifactFromContent(artPath, content)
+
+	if art.Binary {
+		fmt.Fprintf(os.Stderr, "Warning: stdin content appears to be binary\n")
+	}
+
+	// Load config from current directory.
+	cfg, err := config.Load(".")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: configuration error: %v\n", err)
+		return exitError
+	}
+	applyCLIOverrides(cfg, opts)
+
+	// Register custom rules.
+	if len(cfg.CustomRules) > 0 {
+		customDefs := cfg.ToDetectorPatterns()
+		if err := detectors.RegisterCustomPatterns(customDefs); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid custom rule: %v\n", err)
+			return exitError
+		}
+	}
+
+	// Create scanner.
+	scanOpts := cfg.ToScanOptions()
+	if opts.concurrency > 0 {
+		scanOpts.Concurrency = opts.concurrency
+	}
+
+	sc, err := scanner.New(scanOpts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: scanner initialization failed: %v\n", err)
+		return exitError
+	}
+	defer sc.Close()
+
+	// Load ML model if enabled.
+	if cfg.EnableML {
+		defaultPath := findDefaultModelPath()
+		if cfg.ModelPath != "" {
+			if err := sc.LoadModel(cfg.ModelPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: ML model load failed: %v (continuing with regex-only)\n", err)
+			}
+		} else if defaultPath != "" {
+			if err := sc.LoadModel(defaultPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: ML model load failed: %v (continuing with regex-only)\n", err)
+			}
+		}
+	}
+
+	// Scan the single artifact.
+	result := sc.ScanArtifacts([]artifacts.Artifact{art}, scanOpts)
+
+	// Baseline handling.
+	if opts.generateBaseline != "" {
+		bl := baseline.FromScanResult(result)
+		if err := bl.Save(opts.generateBaseline); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to save baseline: %v\n", err)
+			return exitError
+		}
+		fmt.Fprintf(os.Stderr, "Baseline saved to %s (%d entries)\n", opts.generateBaseline, len(bl.Entries))
+		return exitOK
+	}
+
+	if cfg.BaselinePath != "" {
+		bl, err := baseline.Load(cfg.BaselinePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to load baseline: %v\n", err)
+			return exitError
+		}
+		filtered, suppressed := bl.Filter(result.Findings)
+		result.Findings = filtered
+		result.Stats.TotalFindings = len(filtered)
+		if suppressed > 0 && opts.verbose {
+			fmt.Fprintf(os.Stderr, "Suppressed %d findings via baseline\n", suppressed)
+		}
+	}
+
+	// Output results.
+	if err := outputResults(result, "stdin", cfg, opts); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: output failed: %v\n", err)
+		return exitError
+	}
+
+	// Exit code based on fail-on-severity.
+	if result.Stats.TotalFindings > 0 {
+		failSeverity := cfg.FailOnSeverity
+		if failSeverity == "" {
+			failSeverity = "low"
+		}
+		rank := map[string]int{"critical": 4, "high": 3, "medium": 2, "low": 1}
+		minRank, ok := rank[strings.ToLower(failSeverity)]
+		if !ok {
+			minRank = 1
+		}
+		for _, f := range result.Findings {
+			if r, ok := rank[strings.ToLower(string(f.Severity))]; ok && r >= minRank {
+				return exitFindings
+			}
+		}
+	}
+
+	return exitOK
+}
+
+// makeProgressFunc creates a progress callback that writes to w.
+// Shows "Scanning: N/M files" with a carriage return for in-place updates.
+func makeProgressFunc(w io.Writer, total int) scanner.ProgressFunc {
+	start := time.Now()
+	lastUpdate := time.Time{}
+	return func(scanned, totalFiles int) {
+		// Throttle updates to every 500ms to avoid flooding.
+		now := time.Now()
+		if now.Sub(lastUpdate) < 500*time.Millisecond && scanned < totalFiles {
+			return
+		}
+		lastUpdate = now
+
+		elapsed := now.Sub(start).Round(time.Millisecond)
+		fmt.Fprintf(w, "\rScanning: %d/%d files (%s)    ", scanned, totalFiles, elapsed)
+		if scanned >= totalFiles {
+			fmt.Fprintln(w) // newline after completion
+		}
+	}
+}
+
 // findDefaultModelPath searches for the bundled ONNX model file.
 func findDefaultModelPath() string {
 	candidates := []string{
@@ -607,6 +791,16 @@ Scan Options:
   --no-color               Disable ANSI color output (text format)
   --quiet, -q              Suppress output (exit code only)
   --verbose, -v            Verbose output
+  --baseline <file>        Load baseline suppression file
+  --generate-baseline <f>  Save current findings as baseline
+  --concurrency <N>        Number of parallel workers (default: auto)
+  --fail-on <level>        Exit non-zero only for findings at/above level
+  --disable-rule <id>      Disable specific detection rule (repeatable)
+  --stdin-ext <ext>        File extension for stdin classification (default: .txt)
+
+Stdin/Pipe Support:
+  cat file.json | aegisgate-scanner scan - --stdin-ext .json
+  echo "Ignore all previous instructions" | aegisgate-scanner scan -
 
 Exit Codes:
   0 — No findings (scan passed)
@@ -617,6 +811,7 @@ Examples:
   aegisgate-scanner scan ./my-project
   aegisgate-scanner scan ./rag-docs --format sarif -o results.sarif
   aegisgate-scanner scan . --severity high --format json
+  cat agent_skill.py | aegisgate-scanner scan - --stdin-ext .py
   aegisgate-scanner init
 
 For more information: https://aegisgatesecurity.io/docs/scanner
@@ -634,6 +829,16 @@ Options:
   --no-color               Disable ANSI color output
   --quiet, -q              Suppress output (exit code only)
   --verbose, -v            Verbose output
+  --baseline <file>        Load baseline suppression file
+  --generate-baseline <f>  Save current findings as baseline
+  --concurrency <N>        Number of parallel workers (default: auto)
+  --fail-on <level>        Exit non-zero only for findings at/above level
+  --disable-rule <id>      Disable specific detection rule (repeatable)
+  --stdin-ext <ext>        File extension for stdin classification
+
+Stdin:
+  Use "-" as path to read from stdin:
+    cat file.json | aegisgate-scanner scan - --stdin-ext .json
 
 Examples:
   aegisgate-scanner scan ./my-project

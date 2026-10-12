@@ -113,7 +113,16 @@ type ScanOptions struct {
 	// 1 = single worker (same as sequential but with goroutine overhead).
 	// >1 = parallel scanning with a worker pool.
 	Concurrency int
+
+	// Progress is an optional callback invoked after each file is scanned.
+	// It receives (filesScanned, totalFiles). If nil, no progress is reported.
+	Progress ProgressFunc
 }
+
+// ProgressFunc is called to report scanning progress.
+// scanned is the number of files scanned so far, total is the total
+// number of files to scan.
+type ProgressFunc func(scanned, total int)
 
 // ScanResult holds the results of scanning a set of artifacts.
 type ScanResult struct {
@@ -251,14 +260,20 @@ func (s *Scanner) ScanArtifacts(arts []artifacts.Artifact, opts ScanOptions) *Sc
 
 // scanSequential scans artifacts one at a time.
 func (s *Scanner) scanSequential(arts []artifacts.Artifact, opts ScanOptions, result *ScanResult) {
+	total := len(arts)
 	for _, art := range arts {
 		findings := s.ScanArtifact(art, opts)
 		s.recordFindings(result, art, findings)
+		if opts.Progress != nil {
+			opts.Progress(result.Stats.FilesScanned, total)
+		}
 	}
 }
 
 // scanConcurrent scans artifacts using a worker pool.
 func (s *Scanner) scanConcurrent(arts []artifacts.Artifact, opts ScanOptions, result *ScanResult) {
+	total := len(arts)
+
 	type fileResult struct {
 		Index    int
 		Findings []Finding
@@ -301,6 +316,11 @@ func (s *Scanner) scanConcurrent(arts []artifacts.Artifact, opts ScanOptions, re
 	// Collect results.
 	for fr := range results {
 		s.recordFindings(result, fr.Art, fr.Findings)
+		if opts.Progress != nil {
+			s.mu.Lock()
+			opts.Progress(result.Stats.FilesScanned, total)
+			s.mu.Unlock()
+		}
 	}
 }
 

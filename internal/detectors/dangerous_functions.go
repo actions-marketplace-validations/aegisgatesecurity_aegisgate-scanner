@@ -163,6 +163,70 @@ var DangerousFunctionPatterns = []PatternDef{
 		Regex:       `[A-Za-z0-9+/]{100,}={0,2}`,
 		Description: "Large base64 blob (potential encoded payload)",
 	},
+
+	// --- Hardcoded URL/endpoint detection ---
+	{
+		Name:        "dangerous_ip_address_url",
+		Severity:    SeverityHigh,
+		Regex:       `https?://[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(:[0-9]+)?(/.*)?`,
+		Description: "HTTP(S) to raw IP address (potential C2 or internal service)",
+	},
+	{
+		Name:        "dangerous_localhost_url",
+		Severity:    SeverityMedium,
+		Regex:       `https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:[0-9]+)?`,
+		Description: "URL pointing to localhost (potential SSRF or internal service access)",
+	},
+	{
+		Name:        "dangerous_internal_service_url",
+		Severity:    SeverityMedium,
+		Regex:       `https?://[a-zA-Z0-9._-]+:(8[0-9]{3}|9[0-9]{3}|3[0-9]{3}|5[0-9]{3})\b`,
+		Description: "URL with non-standard port (potential internal service endpoint)",
+	},
+	{
+		Name:        "dangerous_websocket_url",
+		Severity:    SeverityHigh,
+		Regex:       `wss?://[a-zA-Z0-9._-]+(:[0-9]+)?(/[^\s"]*)?`,
+		Description: "WebSocket connection (potential data exfiltration channel)",
+	},
+	{
+		Name:        "dangerous_aws_endpoint",
+		Severity:    SeverityHigh,
+		Regex:       `https?://[a-zA-Z0-9-]+\.(s3|sqs|sns|lambda|execute-api|ec2|rds)\.[a-zA-Z0-9.-]*amazonaws\.com`,
+		Description: "Hardcoded AWS service endpoint",
+	},
+	{
+		Name:        "dangerous_gcp_endpoint",
+		Severity:    SeverityHigh,
+		Regex:       `https?://[a-zA-Z0-9-]+\.(googleapis\.com|cloudfunctions\.net|run\.app)`,
+		Description: "Hardcoded GCP service endpoint",
+	},
+
+	// --- Base64 payload detection ---
+	{
+		Name:        "dangerous_py_b64decode",
+		Severity:    SeverityHigh,
+		Regex:       `base64\.b64decode\s*\(`,
+		Description: "Python base64.b64decode() can decode hidden payloads",
+	},
+	{
+		Name:        "dangerous_js_atob",
+		Severity:    SeverityHigh,
+		Regex:       `\batob\s*\(`,
+		Description: "JavaScript atob() decodes base64 payloads",
+	},
+	{
+		Name:        "dangerous_b64_env_var",
+		Severity:    SeverityMedium,
+		Regex:       `(?i)(env|environ|process\.env|os\.environ).*[A-Za-z0-9+/]{60,}={0,2}`,
+		Description: "Base64 blob in environment variable (potential hidden payload)",
+	},
+	{
+		Name:        "dangerous_b64_eval_chain",
+		Severity:    SeverityCritical,
+		Regex:       `(eval|exec|atob|b64decode|Buffer\.from)\s*\([^)]*[A-Za-z0-9+/]{40,}`,
+		Description: "Base64 payload fed directly to eval/exec (critical execution chain)",
+	},
 }
 
 // CompiledDangerousFunctionPatterns holds pre-compiled dangerous function regex patterns.
