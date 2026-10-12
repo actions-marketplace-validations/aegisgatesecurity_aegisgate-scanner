@@ -369,12 +369,13 @@ func shouldIgnore(path string, patterns []string) bool {
 			}
 		}
 
-		// Check substring match for simple patterns.
-		if !strings.Contains(pattern, "*") && !strings.Contains(pattern, "?") {
-			if strings.Contains(normalized, pattern) {
-				return true
-			}
-		}
+		// NOTE: Substring matching was removed to prevent false positives.
+		// The path component match above (line 349-353) and full path glob
+		// match (line 357-360) already cover all legitimate ignore cases.
+		// Substring matching caused security-relevant false positives: e.g.,
+		// pattern "bin" would silently skip "binary.py", "env" would skip
+		// "envelope.json", "build" would skip "build_notes.md".  In a
+		// security scanner, silently skipping files is a detection bypass.
 	}
 
 	return false

@@ -117,16 +117,38 @@ jobs:
       - name: Run tests (non-CGO)
         run: |
           CGO_ENABLED=0 go test -v -coverprofile=coverage-lite.out -covermode=atomic ./... 2>&1 | tee test-output.txt
-      - name: Check coverage ≥ 90%
+      - name: Check coverage ≥ 90% (minimum across all packages)
         run: |
-          TOTAL=$(grep '^ok' test-output.txt | grep 'coverage:' | head -1 | sed 's/.*coverage: \([0-9.]*\)%.*/\1/')
-          if [ -z "$TOTAL" ]; then
-            TOTAL=$(grep 'coverage:' test-output.txt | head -1 | sed 's/.*coverage: \([0-9.]*\)%.*/\1/')
+          echo "## Coverage Report (non-CGO)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Coverage |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|----------|" >> $GITHUB_STEP_SUMMARY
+          FAIL=0
+          MIN_COV=100
+          while IFS= read -r line; do
+            if echo "$line" | grep -q 'coverage:'; then
+              COV=$(echo "$line" | sed 's/.*coverage: \([0-9.]*\)%.*/\1/')
+              PKG=$(echo "$line" | awk '{print $2}')
+              if [ -n "$COV" ]; then
+                echo "| $PKG | ${COV}% |" >> $GITHUB_STEP_SUMMARY
+                if [ "$(echo "$COV < $MIN_COV" | bc)" = "1" ]; then
+                  MIN_COV=$COV
+                fi
+                if [ "$(echo "$COV < 90" | bc)" = "1" ]; then
+                  echo "❌ $PKG coverage ${COV}% < 90%"
+                  FAIL=1
+                fi
+              fi
+            fi
+          done < test-output.txt
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Minimum coverage: ${MIN_COV}%**" >> $GITHUB_STEP_SUMMARY
+          echo "Minimum coverage across all packages: ${MIN_COV}%"
+          if [ "$FAIL" -eq 1 ]; then
+            echo "❌ FAIL: one or more packages below 90% coverage"
+            exit 1
           fi
-          echo "Coverage (non-CGO): ${TOTAL}%"
-          if [ -z "$TOTAL" ]; then echo "FAIL: could not compute coverage"; exit 1; fi
-          PASS=$(echo "$TOTAL >= 90" | bc)
-          if [ "$PASS" != "1" ]; then echo "FAIL: coverage ${TOTAL}% < 90%"; exit 1; fi
+          echo "✅ All packages ≥ 90% coverage"
       - name: Upload coverage
         uses: actions/upload-artifact@v6
         with:
@@ -155,16 +177,38 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/lib/amd64
         run: |
           go test -v -coverprofile=coverage-ml.out -covermode=atomic ./... 2>&1 | tee test-output-ml.txt
-      - name: Check coverage ≥ 90%
+      - name: Check coverage ≥ 90% (minimum across all packages)
         run: |
-          TOTAL=$(grep '^ok' test-output-ml.txt | grep 'coverage:' | head -1 | sed 's/.*coverage: \([0-9.]*\)%.*/\1/')
-          if [ -z "$TOTAL" ]; then
-            TOTAL=$(grep 'coverage:' test-output-ml.txt | head -1 | sed 's/.*coverage: \([0-9.]*\)%.*/\1/')
+          echo "## Coverage Report (CGO)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Coverage |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|----------|" >> $GITHUB_STEP_SUMMARY
+          FAIL=0
+          MIN_COV=100
+          while IFS= read -r line; do
+            if echo "$line" | grep -q 'coverage:'; then
+              COV=$(echo "$line" | sed 's/.*coverage: \([0-9.]*\)%.*/\1/')
+              PKG=$(echo "$line" | awk '{print $2}')
+              if [ -n "$COV" ]; then
+                echo "| $PKG | ${COV}% |" >> $GITHUB_STEP_SUMMARY
+                if [ "$(echo "$COV < $MIN_COV" | bc)" = "1" ]; then
+                  MIN_COV=$COV
+                fi
+                if [ "$(echo "$COV < 90" | bc)" = "1" ]; then
+                  echo "❌ $PKG coverage ${COV}% < 90%"
+                  FAIL=1
+                fi
+              fi
+            fi
+          done < test-output-ml.txt
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Minimum coverage: ${MIN_COV}%**" >> $GITHUB_STEP_SUMMARY
+          echo "Minimum coverage across all packages: ${MIN_COV}%"
+          if [ "$FAIL" -eq 1 ]; then
+            echo "❌ FAIL: one or more packages below 90% coverage"
+            exit 1
           fi
-          echo "Coverage (CGO): ${TOTAL}%"
-          if [ -z "$TOTAL" ]; then echo "FAIL: could not compute coverage"; exit 1; fi
-          PASS=$(echo "$TOTAL >= 90" | bc)
-          if [ "$PASS" != "1" ]; then echo "FAIL: coverage ${TOTAL}% < 90%"; exit 1; fi
+          echo "✅ All packages ≥ 90% coverage"
       - name: Upload coverage
         uses: actions/upload-artifact@v6
         with:

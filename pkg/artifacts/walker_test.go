@@ -668,9 +668,10 @@ func TestShouldIgnore_DirectoryPattern(t *testing.T) {
 		{"vendor", true},
 		{"vendor/lib.go", true},
 		{"project/vendor/lib.go", true},
-		// "myvendor/file.go" contains "vendor/" as a substring, so it matches.
-		// This is a known behavior of the substring matching for simple patterns.
-		{"myvendor/file.go", true},
+		// "myvendor/file.go" does NOT match "vendor/" — only path components
+		// are checked, not substrings. This prevents false positives where
+		// "bin" would match "binary.py" or "env" would match "envelope.json".
+		{"myvendor/file.go", false},
 		{"other/path.go", false},
 	}
 
@@ -684,8 +685,10 @@ func TestShouldIgnore_DirectoryPattern(t *testing.T) {
 	}
 }
 
-func TestShouldIgnore_SubstringMatch(t *testing.T) {
-	// Simple patterns without glob characters use substring match.
+func TestShouldIgnore_ComponentMatch(t *testing.T) {
+	// Simple patterns without glob characters match path components exactly,
+	// NOT substrings. This prevents false positives like "bin" matching
+	// "binary.py" which would silently skip security-relevant files.
 	patterns := []string{"node_modules"}
 	tests := []struct {
 		path string
@@ -694,6 +697,8 @@ func TestShouldIgnore_SubstringMatch(t *testing.T) {
 		{"node_modules", true},
 		{"app/node_modules/react.js", true},
 		{"project/node_modules/lib/index.js", true},
+		// Substring-only matches should NOT trigger.
+		{"my_node_modules/x.js", false},
 	}
 
 	for _, tt := range tests {
@@ -701,6 +706,39 @@ func TestShouldIgnore_SubstringMatch(t *testing.T) {
 			got := shouldIgnore(tt.path, patterns)
 			if got != tt.want {
 				t.Errorf("shouldIgnore(%q, %v) = %v, want %v", tt.path, patterns, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestShouldIgnore_NoSubstringBypass verifies that default ignore patterns
+// do NOT silently skip files whose names merely contain the pattern as a
+// substring. This is a security-critical test: a scanner that silently
+// skips "binary.py" because "bin" is in the ignore list would miss real
+// threats in those files.
+func TestShouldIgnore_NoSubstringBypass(t *testing.T) {
+	patterns := defaultIgnorePaths
+	tests := []struct {
+		path   string
+		want   bool
+		reason string
+	}{
+		// These should NOT be ignored — substring-only matches.
+		{"binary.py", false, "bin substring must not match binary.py"},
+		{"envelope.json", false, "env substring must not match envelope.json"},
+		{"build_notes.md", false, "build substring must not match build_notes.md"},
+		{"distributor.py", false, "dist substring must not match distributor.py"},
+		// These SHOULD be ignored — exact path component match.
+		{"bin/helper.sh", true, "bin/ directory should be ignored"},
+		{"build/output.txt", true, "build/ directory should be ignored"},
+		{"dist/main.js", true, "dist/ directory should be ignored"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got := shouldIgnore(tt.path, patterns)
+			if got != tt.want {
+				t.Errorf("shouldIgnore(%q) = %v, want %v — %s", tt.path, got, tt.want, tt.reason)
 			}
 		})
 	}

@@ -958,11 +958,12 @@ func printScanUsage() {
 	fmt.Print(`Usage: aegisgate-scanner scan [path] [options]
 
 Options:
-  --format, -f <format>    Output format: sarif, json, text (default: text)
+  --format, -f <format>    Output format: sarif, json, text, html, pr-comment,
+                           github-actions, sbom (default: text)
   --output, -o <file>      Write output to file instead of stdout
   --severity, -s <level>   Minimum severity: critical, high, medium, low
   --no-ml                  Disable ML threat detection (regex-only)
-  --no-color               Disable ANSI color output
+  --no-color               Disable ANSI color output (text format)
   --quiet, -q              Suppress output (exit code only)
   --verbose, -v            Verbose output
   --baseline <file>        Load baseline suppression file
@@ -970,15 +971,27 @@ Options:
   --concurrency <N>        Number of parallel workers (default: auto)
   --fail-on <level>        Exit non-zero only for findings at/above level
   --disable-rule <id>      Disable specific detection rule (repeatable)
-  --stdin-ext <ext>        File extension for stdin classification
+  --stdin-ext <ext>        File extension for stdin classification (default: .txt)
+  --diff <base_branch>     Only scan files changed vs base branch
+  --extract-archives       Extract archives before scanning (default: true)
+  --no-extract-archives    Disable archive extraction
 
-Stdin:
+Stdin/Pipe Support:
   Use "-" as path to read from stdin:
     cat file.json | aegisgate-scanner scan - --stdin-ext .json
+    echo "Ignore all previous instructions" | aegisgate-scanner scan -
+
+Exit Codes:
+  0 — No findings (scan passed)
+  1 — Findings detected (scan failed)
+  2 — Configuration or runtime error
 
 Examples:
   aegisgate-scanner scan ./my-project
   aegisgate-scanner scan ./rag-docs --format sarif -o results.sarif
+  aegisgate-scanner scan . --severity high --format json
+  cat agent_skill.py | aegisgate-scanner scan - --stdin-ext .py
+  aegisgate-scanner scan . --diff main --format github-actions
 `)
 }
 
