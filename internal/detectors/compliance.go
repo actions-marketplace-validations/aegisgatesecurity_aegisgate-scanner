@@ -368,6 +368,67 @@ var CompliancePatterns = []PatternDef{
 		Regex:       `(?i)\{\{[\d\s+\-*/()]+\}\}`,
 		Description: "SSTI mathematical probe — reconnaissance for template injection",
 	},
+	// --- Indirect prompt injection patterns ---
+	// These detect subtle injection in retrieved content (RAG documents,
+	// web pages) that doesn't use overt "ignore instructions" phrasing
+	// but still manipulates LLM behavior.
+	{
+		Name:        "prompt_injection_indirect_conditional",
+		Severity:    SeverityHigh,
+		Regex:       `(?i)(?:if\s+(?:the\s+)?(?:user|reader|asker)\s+(?:asks?|requests?|inquires?|wants?))\s*,?\s*(?:then\s+)?(?:respond|answer|reply|tell|say|output|return)\s+(?:that|with)\s+`,
+		Description: "Indirect prompt injection — conditional instruction in retrieved content",
+	},
+	{
+		Name:        "prompt_injection_indirect_role_redef",
+		Severity:    SeverityHigh,
+		Regex:       `(?i)(?:note\s+to\s+(?:the\s+)?(?:assistant|AI|system|model|chatbot))\s*:|(?:reminder\s+for\s+(?:the\s+)?(?:assistant|AI|system))\s*:`,
+		Description: "Indirect prompt injection — role redefinition via note/reminder in content",
+	},
+	{
+		Name:        "prompt_injection_indirect_context_override",
+		Severity:    SeverityHigh,
+		Regex:       `(?i)(?:the\s+previous\s+(?:document|page|section|context)\s+is\s+(?:outdated|deprecated|wrong|incorrect|superseded))\s*[,;.]?\s*(?:use|refer\s+to|follow)\s+(?:this|the\s+following)\s+(?:information|document|instructions?)\s+(?:instead)?`,
+		Description: "Indirect prompt injection — context override claiming prior content is outdated",
+	},
+	{
+		Name:        "prompt_injection_indirect_instruction_embed",
+		Severity:    SeverityMedium,
+		Regex:       `(?i)(?:important\s+(?:notice|instruction|update)\s+for\s+(?:the\s+)?(?:AI|assistant|model|system))\s*[:.]|(?:system\s+update)\s*[:.]\s*(?:you\s+(?:must|should|are\s+now))`,
+		Description: "Indirect prompt injection — embedded system instructions in content",
+	},
+	{
+		Name:        "prompt_injection_indirect_data_exfil",
+		Severity:    SeverityHigh,
+		Regex:       `(?i)(?:when\s+(?:responding|answering|replying))\s*,?\s*(?:always\s+)?(?:include|append|add|embed|insert)\s+(?:the\s+)?(?:user'?s?\s+)?(?:system\s+prompt|API\s+key|credentials?|token|secret|personal\s+data|SSN|password)`,
+		Description: "Indirect prompt injection — data exfiltration via response manipulation",
+	},
+	// --- Model config schema validation ---
+	// Detect dangerous model configuration values that could lead to
+	// arbitrary code execution or security bypasses.
+	{
+		Name:        "model_config_trust_remote_code",
+		Severity:    SeverityCritical,
+		Regex:       `(?i)trust_remote_code\s*[:=]\s*(?:true|True|TRUE|1|yes)`,
+		Description: "Dangerous model config — trust_remote_code enabled allows arbitrary code execution from model files",
+	},
+	{
+		Name:        "model_config_load_in_4bit",
+		Severity:    SeverityLow,
+		Regex:       `(?i)load_in_4bit\s*[:=]\s*(?:true|True|TRUE|1|yes)`,
+		Description: "Model config — 4-bit quantization enabled (may reduce model safety alignment)",
+	},
+	{
+		Name:        "model_config_unsafe_pickle",
+		Severity:    SeverityHigh,
+		Regex:       `(?i)(?:torch\.load|pickle\.load(?:s)?)\s*\((?:.*?,?\s*)?(?:weights_only\s*=\s*False|map_location\s*=\s*['\"]cpu['\"])`,
+		Description: "Unsafe model loading — pickle/torch.load without weights_only=True risks arbitrary code execution",
+	},
+	{
+		Name:        "model_config_disable_safety",
+		Severity:    SeverityCritical,
+		Regex:       `(?i)(?:safety_checker|safety_filter|content_filter|guardrails?)\s*[:=]\s*(?:None|null|false|False|FALSE|disabled?|off)`,
+		Description: "Dangerous model config — safety checker/filter disabled removes content safety guardrails",
+	},
 }
 
 // CompiledCompliancePatterns holds pre-compiled compliance regex patterns.

@@ -238,6 +238,16 @@ func (s *Scanner) ScanArtifact(art artifacts.Artifact, opts ScanOptions) []Findi
 		findings = findings[:opts.MaxFindingsPerFile]
 	}
 
+	// --- Apply inline suppressions ---
+	// Parse aegisgate-ignore comments from the artifact content and
+	// filter out matching findings.
+	if art.Content != "" {
+		suppressions := ParseSuppressions(art.Content)
+		if len(suppressions) > 0 {
+			findings = ApplySuppressions(findings, suppressions)
+		}
+	}
+
 	return findings
 }
 
