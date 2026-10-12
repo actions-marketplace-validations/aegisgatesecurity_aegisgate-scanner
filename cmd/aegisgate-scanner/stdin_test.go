@@ -466,7 +466,7 @@ func TestRunScan_StdinPath(t *testing.T) {
 	cleanupStdin := withStdin(content)
 	defer cleanupStdin()
 
-	exitCode := runScan([]string{"-", "--stdin-ext", ".txt", "--format", "json"})
+	exitCode := runScan([]string{"-", "--stdin-ext", ".txt", "--format", "json"}, "", "")
 	if exitCode != exitFindings {
 		t.Errorf("expected exitFindings (%d) for stdin prompt injection via runScan, got %d", exitFindings, exitCode)
 	}
@@ -483,7 +483,7 @@ func TestRunScan_StdinPathClean(t *testing.T) {
 	cleanupStdin := withStdin(content)
 	defer cleanupStdin()
 
-	exitCode := runScan([]string{"-", "--format", "text"})
+	exitCode := runScan([]string{"-", "--format", "text"}, "", "")
 	if exitCode != exitOK {
 		t.Errorf("expected exitOK (%d) for clean stdin via runScan, got %d", exitOK, exitCode)
 	}
@@ -501,7 +501,7 @@ func TestRunScan_StdinPathStdinExtFlag(t *testing.T) {
 	defer cleanupStdin()
 
 	// Use --stdin-ext=.py (equals form) to exercise that parsing path too.
-	exitCode := runScan([]string{"-", "--stdin-ext=.py", "--format", "json"})
+	exitCode := runScan([]string{"-", "--stdin-ext=.py", "--format", "json"}, "", "")
 	if exitCode != exitFindings {
 		t.Errorf("expected exitFindings (%d), got %d", exitFindings, exitCode)
 	}
@@ -517,7 +517,7 @@ func TestRunScan_StdinPathEmpty(t *testing.T) {
 	cleanupStdin := withStdin([]byte{})
 	defer cleanupStdin()
 
-	exitCode := runScan([]string{"-"})
+	exitCode := runScan([]string{"-"}, "", "")
 	if exitCode != exitError {
 		t.Errorf("expected exitError (%d) for empty stdin via runScan, got %d", exitError, exitCode)
 	}
@@ -649,7 +649,7 @@ func TestRunScanStdin_VerboseBaselineSuppression(t *testing.T) {
 		})
 	})
 
-	if !strings.Contains(stderr, "Suppressed") {
+	if !strings.Contains(stderr, "suppressed findings via baseline") {
 		t.Errorf("expected verbose output to mention suppression, got: %s", stderr)
 	}
 }

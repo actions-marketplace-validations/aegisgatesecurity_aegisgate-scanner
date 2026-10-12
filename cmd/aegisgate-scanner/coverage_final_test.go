@@ -32,7 +32,7 @@ func TestRunScan_ParseError(t *testing.T) {
 	if exitCode != exitError {
 		t.Errorf("exit code = %d, want %d", exitCode, exitError)
 	}
-	if !strings.Contains(buf.String(), "Error:") {
+	if !strings.Contains(buf.String(), "failed to parse arguments") {
 		t.Errorf("expected error message, got: %s", buf.String())
 	}
 }
@@ -394,7 +394,7 @@ output_format: text
 		scanDir,
 		"--config", configPath,
 		"--quiet",
-	})
+	}, "", "")
 
 	// With min_severity=high, prompt injection is critical so it should still fail.
 	if exitCode != exitFindings {
@@ -408,7 +408,7 @@ func TestRunScan_ConfigFlag_NonexistentFile(t *testing.T) {
 		dir,
 		"--config", filepath.Join(dir, "nonexistent.yml"),
 		"--quiet",
-	})
+	}, "", "")
 
 	if exitCode != exitError {
 		t.Errorf("exit code = %d, want %d (error for nonexistent config)", exitCode, exitError)

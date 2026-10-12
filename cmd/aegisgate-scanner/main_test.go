@@ -1127,8 +1127,8 @@ func TestCLI_UnknownCommand(t *testing.T) {
 	if code != exitError {
 		t.Errorf("expected exit code %d, got %d", exitError, code)
 	}
-	if !strings.Contains(stderr, "Unknown command") {
-		t.Error("expected 'Unknown command' in stderr")
+	if !strings.Contains(stderr, "unknown command") {
+		t.Error("expected 'unknown command' in stderr")
 	}
 	// printUsage() writes to stdout, not stderr.
 	if !strings.Contains(stdout, "Usage:") {
@@ -1148,8 +1148,8 @@ func TestCLI_ScanNoArtifacts(t *testing.T) {
 		t.Errorf("expected exit code %d for no artifacts, got %d; stderr=%s",
 			exitOK, code, stderr)
 	}
-	if !strings.Contains(stderr, "No supported AI artifacts") {
-		t.Error("expected 'No supported AI artifacts' in stderr")
+	if !strings.Contains(stderr, "no supported AI artifacts") {
+		t.Error("expected 'no supported AI artifacts' in stderr")
 	}
 }
 
@@ -1175,8 +1175,8 @@ func TestCLI_ScanNonExistentPath(t *testing.T) {
 		t.Errorf("expected exit code %d for empty/non-existent path, got %d; stderr=%s",
 			exitOK, code, stderr)
 	}
-	if !strings.Contains(stderr, "No supported AI artifacts") {
-		t.Error("expected 'No supported AI artifacts' in stderr")
+	if !strings.Contains(stderr, "no supported AI artifacts") {
+		t.Error("expected 'no supported AI artifacts' in stderr")
 	}
 }
 
@@ -1282,8 +1282,8 @@ func TestCLI_ScanUnknownFlag(t *testing.T) {
 	if code != exitError {
 		t.Errorf("expected exit code %d, got %d", exitError, code)
 	}
-	if !strings.Contains(stderr, "Error:") {
-		t.Error("expected 'Error:' in stderr for unknown flag")
+	if !strings.Contains(stderr, "failed to parse arguments") {
+		t.Error("expected 'failed to parse arguments' in stderr for unknown flag")
 	}
 }
 

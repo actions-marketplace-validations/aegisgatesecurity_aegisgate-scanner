@@ -101,6 +101,16 @@ type Config struct {
 
 	// DisableRules is a list of rule IDs to disable (skip during scanning).
 	DisableRules []string `yaml:"disable_rules"`
+
+	// LogLevel controls the verbosity of diagnostic logging.
+	// Options: debug, info, warn, error.
+	// Default: info.
+	LogLevel string `yaml:"log_level"`
+
+	// LogFormat controls the output format for diagnostic logging.
+	// Options: text, json.
+	// Default: text.
+	LogFormat string `yaml:"log_format"`
 }
 
 // CustomRuleConfig defines a user-created detection rule in the config file.
@@ -134,6 +144,8 @@ func Default() *Config {
 		RespectGitIgnore:   true,
 		FailOnSeverity:     "low",
 		DisableRules:       []string{},
+		LogLevel:           "info",
+		LogFormat:          "text",
 	}
 }
 
@@ -247,6 +259,20 @@ func (c *Config) Validate() error {
 	case "critical", "high", "medium", "low", "":
 	default:
 		return fmt.Errorf("invalid fail_on_severity: %s (must be critical, high, medium, or low)", c.FailOnSeverity)
+	}
+
+	// Validate log level.
+	switch strings.ToLower(c.LogLevel) {
+	case "debug", "info", "warn", "warning", "error", "err", "":
+	default:
+		return fmt.Errorf("invalid log_level: %s (must be debug, info, warn, or error)", c.LogLevel)
+	}
+
+	// Validate log format.
+	switch strings.ToLower(c.LogFormat) {
+	case "text", "json", "":
+	default:
+		return fmt.Errorf("invalid log_format: %s (must be text or json)", c.LogFormat)
 	}
 
 	// Validate custom rules.

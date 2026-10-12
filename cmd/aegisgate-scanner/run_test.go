@@ -156,7 +156,7 @@ func TestRun_UnknownCommand(t *testing.T) {
 	if exitCode != exitError {
 		t.Errorf("exit code = %d, want %d", exitCode, exitError)
 	}
-	if !strings.Contains(buf.String(), "Unknown command: foobar") {
+	if !strings.Contains(buf.String(), "unknown command") {
 		t.Errorf("expected unknown command error, got: %s", buf.String())
 	}
 }

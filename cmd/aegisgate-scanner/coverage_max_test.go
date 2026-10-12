@@ -101,7 +101,7 @@ enable_ml: false
 	if exitCode != exitFindings {
 		t.Errorf("exit code = %d, want %d (custom rule should trigger)", exitCode, exitFindings)
 	}
-	if !strings.Contains(buf.String(), "Registered 1 custom rules") {
+	if !strings.Contains(buf.String(), "registered custom rules") {
 		t.Errorf("expected verbose 'Registered 1 custom rules', got: %s", buf.String())
 	}
 }
@@ -126,10 +126,10 @@ func TestRunScan_NoArtifactsFound(t *testing.T) {
 	if exitCode != exitOK {
 		t.Errorf("exit code = %d, want %d (no artifacts is OK)", exitCode, exitOK)
 	}
-	if !strings.Contains(buf.String(), "No supported AI artifacts found") {
+	if !strings.Contains(buf.String(), "no supported AI artifacts found") {
 		t.Errorf("expected 'No supported AI artifacts found', got: %s", buf.String())
 	}
-	if !strings.Contains(buf.String(), "Supported extensions:") {
+	if !strings.Contains(buf.String(), "supported_extensions") {
 		t.Errorf("expected 'Supported extensions:', got: %s", buf.String())
 	}
 }
@@ -266,7 +266,7 @@ func TestRunScan_GenerateBaselineSuccess(t *testing.T) {
 	if exitCode != exitOK {
 		t.Errorf("exit code = %d, want %d", exitCode, exitOK)
 	}
-	if !strings.Contains(buf.String(), "Baseline saved") {
+	if !strings.Contains(buf.String(), "baseline saved") {
 		t.Errorf("expected 'Baseline saved', got: %s", buf.String())
 	}
 	// Verify file exists
@@ -330,7 +330,7 @@ func TestRunScan_BaselineSuppressionVerbose(t *testing.T) {
 	if exitCode != exitOK {
 		t.Errorf("exit code = %d, want %d (suppressed)", exitCode, exitOK)
 	}
-	if !strings.Contains(buf.String(), "Suppressed") {
+	if !strings.Contains(buf.String(), "suppressed findings via baseline") {
 		t.Errorf("expected 'Suppressed' message, got: %s", buf.String())
 	}
 }
@@ -1116,7 +1116,7 @@ func TestRunScanStdin_BaselineSuppressionVerbose(t *testing.T) {
 	if exitCode != exitOK {
 		t.Errorf("exit code = %d, want %d (suppressed)", exitCode, exitOK)
 	}
-	if !strings.Contains(buf.String(), "Suppressed") {
+	if !strings.Contains(buf.String(), "suppressed findings via baseline") {
 		t.Errorf("expected 'Suppressed' message, got: %s", buf.String())
 	}
 }

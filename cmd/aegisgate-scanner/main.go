@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -75,9 +76,27 @@ func run(argv []string) int {
 	command := argv[1]
 	args := argv[2:]
 
+	// Parse global flags (--log-level, --log-format) before command dispatch.
+	// These are available to all commands.
+	logLevel := ""
+	logFormat := ""
+	args, logLevel, logFormat = parseGlobalFlags(args)
+
+	// Initialize structured logger.
+	// Precedence: CLI flag > default (info/text).
+	// Config file values are applied later in each command after config load,
+	// but we init here so even pre-config-load diagnostics are structured.
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	if logFormat == "" {
+		logFormat = "text"
+	}
+	initLogger(logLevel, logFormat)
+
 	switch command {
 	case "scan":
-		return runScan(args)
+		return runScan(args, logLevel, logFormat)
 	case "init":
 		return runInit(args)
 	case "version":
@@ -91,21 +110,66 @@ func run(argv []string) int {
 		printUsage()
 		return exitOK
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", command)
+		slog.Error("unknown command", "command", command)
 		printUsage()
 		return exitError
 	}
+}
+
+// parseGlobalFlags scans args for --log-level and --log-format, removes
+// them, and returns the remaining args along with the extracted values.
+// This allows global flags to appear before or after command-specific args.
+func parseGlobalFlags(args []string) (remaining []string, logLevel, logFormat string) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		switch {
+		case arg == "--log-level":
+			i++
+			if i < len(args) {
+				logLevel = args[i]
+			}
+
+		case strings.HasPrefix(arg, "--log-level="):
+			logLevel = strings.TrimPrefix(arg, "--log-level=")
+
+		case arg == "--log-format":
+			i++
+			if i < len(args) {
+				logFormat = args[i]
+			}
+
+		case strings.HasPrefix(arg, "--log-format="):
+			logFormat = strings.TrimPrefix(arg, "--log-format=")
+
+		default:
+			remaining = append(remaining, arg)
+		}
+	}
+	return remaining, logLevel, logFormat
 }
 
 // ---------------------------------------------------------------------
 // scan command
 // ---------------------------------------------------------------------
 
-func runScan(args []string) int {
+func runScan(args []string, globalLogLevel, globalLogFormat string) int {
+	// Initialize logger early so even pre-config-parse errors are structured.
+	// May be re-initialized later after config load with config-derived settings.
+	earlyLevel := globalLogLevel
+	if earlyLevel == "" {
+		earlyLevel = "info"
+	}
+	earlyFormat := globalLogFormat
+	if earlyFormat == "" {
+		earlyFormat = "text"
+	}
+	initLogger(earlyLevel, earlyFormat)
+
 	// Parse arguments.
 	opts, err := parseScanArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n\n", err)
+		slog.Error("failed to parse arguments", "error", err)
 		printScanUsage()
 		return exitError
 	}
@@ -124,7 +188,7 @@ func runScan(args []string) int {
 	// Resolve to absolute path.
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot resolve path %s: %v\n", root, err)
+		slog.Error("cannot resolve path", "path", root, "error", err)
 		return exitError
 	}
 
@@ -133,13 +197,13 @@ func runScan(args []string) int {
 	if opts.configPath != "" {
 		cfg, err = config.LoadFile(opts.configPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: configuration error (%s): %v\n", opts.configPath, err)
+			slog.Error("configuration error", "config", opts.configPath, "error", err)
 			return exitError
 		}
 	} else {
 		cfg, err = config.Load(absRoot)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: configuration error: %v\n", err)
+			slog.Error("configuration error", "error", err)
 			return exitError
 		}
 	}
@@ -147,38 +211,57 @@ func runScan(args []string) int {
 	// Apply CLI overrides.
 	applyCLIOverrides(cfg, opts)
 
+	// Reinitialize logger if config provides log settings and CLI didn't.
+	// Precedence: CLI global flag > verbose shorthand > config file > default.
+	// Note: --quiet only suppresses stdout output (scan results), not
+	// diagnostic logging. This preserves the original semantics where
+	// --verbose and --quiet were independent flags.
+	effectiveLevel := globalLogLevel
+	if effectiveLevel == "" || effectiveLevel == "info" {
+		if opts.verbose {
+			effectiveLevel = "debug"
+		} else if cfg.LogLevel != "" && cfg.LogLevel != "info" {
+			effectiveLevel = cfg.LogLevel
+		}
+	}
+	effectiveFormat := globalLogFormat
+	if effectiveFormat == "" || effectiveFormat == "text" {
+		if cfg.LogFormat != "" && cfg.LogFormat != "text" {
+			effectiveFormat = cfg.LogFormat
+		}
+	}
+	initLogger(effectiveLevel, effectiveFormat)
+
 	// Register custom rules from config.
 	if len(cfg.CustomRules) > 0 {
 		customDefs := cfg.ToDetectorPatterns()
 		if err := detectors.RegisterCustomPatterns(customDefs); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: invalid custom rule: %v\n", err)
+			slog.Error("invalid custom rule", "error", err)
 			return exitError
 		}
-		if opts.verbose {
-			fmt.Fprintf(os.Stderr, "Registered %d custom rules\n", len(customDefs))
-		}
+		slog.Debug("registered custom rules", "count", len(customDefs))
 	}
 
 	// Load and register plugins from .aegisgate-plugins/ directory.
 	loadedPlugins, err := plugins.LoadPluginsFromDirWithDefault(absRoot)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to load plugins: %v\n", err)
+		slog.Warn("failed to load plugins", "error", err)
 	} else if len(loadedPlugins) > 0 {
 		if err := plugins.RegisterPluginsWithDetector(loadedPlugins); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to register plugins: %v\n", err)
-		} else if opts.verbose {
+			slog.Warn("failed to register plugins", "error", err)
+		} else {
 			totalRules := 0
 			for _, p := range loadedPlugins {
 				totalRules += len(p.Rules())
 			}
-			fmt.Fprintf(os.Stderr, "Loaded %d plugins with %d rules\n", len(loadedPlugins), totalRules)
+			slog.Info("loaded plugins", "plugins", len(loadedPlugins), "rules", totalRules)
 		}
 	}
 
 	// Walk files.
 	walkResult, err := artifacts.Walk(cfg.ToWalkOptions(absRoot))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: file walk failed: %v\n", err)
+		slog.Error("file walk failed", "error", err)
 		return exitError
 	}
 
@@ -186,12 +269,10 @@ func runScan(args []string) int {
 	if opts.diffBase != "" {
 		changedFiles, err := scanner.GetChangedFiles(opts.diffBase, absRoot)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: git diff failed: %v\n", err)
+			slog.Error("git diff failed", "error", err)
 			return exitError
 		}
-		if opts.verbose {
-			fmt.Fprintf(os.Stderr, "Diff scan: %d changed files vs %s\n", len(changedFiles), opts.diffBase)
-		}
+		slog.Info("diff scan", "changed_files", len(changedFiles), "base", opts.diffBase)
 
 		// Filter artifacts to only changed files.
 		var filteredArts []artifacts.Artifact
@@ -214,9 +295,7 @@ func runScan(args []string) int {
 			if artifacts.IsArchive(art.AbsPath) {
 				extResult, err := artifacts.ExtractArchive(art.AbsPath)
 				if err != nil {
-					if opts.verbose {
-						fmt.Fprintf(os.Stderr, "Warning: failed to extract %s: %v\n", art.Path, err)
-					}
+					slog.Warn("failed to extract archive", "path", art.Path, "error", err)
 					newArts = append(newArts, art)
 					continue
 				}
@@ -227,9 +306,7 @@ func runScan(args []string) int {
 				extWalkOpts.RespectGitIgnore = false
 				extWalkResult, err := artifacts.Walk(extWalkOpts)
 				if err != nil {
-					if opts.verbose {
-						fmt.Fprintf(os.Stderr, "Warning: failed to walk extracted %s: %v\n", art.Path, err)
-					}
+					slog.Warn("failed to walk extracted archive", "path", art.Path, "error", err)
 					newArts = append(newArts, art)
 					continue
 				}
@@ -240,9 +317,7 @@ func runScan(args []string) int {
 				}
 				newArts = append(newArts, extWalkResult.Artifacts...)
 
-				if opts.verbose {
-					fmt.Fprintf(os.Stderr, "Extracted %d files from %s\n", len(extWalkResult.Artifacts), art.Path)
-				}
+				slog.Info("extracted archive", "files", len(extWalkResult.Artifacts), "archive", art.Path)
 			} else {
 				newArts = append(newArts, art)
 			}
@@ -252,9 +327,8 @@ func runScan(args []string) int {
 
 	// Skip if no artifacts found.
 	if len(walkResult.Artifacts) == 0 {
-		fmt.Fprintf(os.Stderr, "No supported AI artifacts found in %s\n", absRoot)
-		fmt.Fprintf(os.Stderr, "Supported extensions: %s\n",
-			strings.Join(artifacts.SupportedExtensions(), ", "))
+		slog.Info("no supported AI artifacts found", "path", absRoot,
+			"supported_extensions", strings.Join(artifacts.SupportedExtensions(), ", "))
 		return exitOK
 	}
 
@@ -268,7 +342,7 @@ func runScan(args []string) int {
 
 	sc, err := scanner.New(scanOpts)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: scanner initialization failed: %v\n", err)
+		slog.Error("scanner initialization failed", "error", err)
 		return exitError
 	}
 	defer sc.Close()
@@ -277,20 +351,22 @@ func runScan(args []string) int {
 	if cfg.EnableML && cfg.ModelPath != "" {
 		if err := sc.LoadModel(cfg.ModelPath); err != nil {
 			// ML failure is non-fatal — fall back to regex-only.
-			fmt.Fprintf(os.Stderr, "Warning: ML model load failed: %v (continuing with regex-only)\n", err)
+			slog.Warn("ML model load failed, continuing with regex-only", "error", err)
 		}
 	} else if cfg.EnableML {
 		// Try default model path.
 		defaultPath := findDefaultModelPath()
 		if defaultPath != "" {
 			if err := sc.LoadModel(defaultPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: ML model load failed: %v (continuing with regex-only)\n", err)
+				slog.Warn("ML model load failed, continuing with regex-only", "error", err)
 			}
 		}
 	}
 
 	// Set up progress indicator for large scans (stderr, non-TTY safe).
-	if !opts.quiet && len(walkResult.Artifacts) > 10 {
+	// Only show progress in text log mode — JSON log format would corrupt
+	// structured log lines with carriage-return progress updates.
+	if !opts.quiet && effectiveFormat == "text" && len(walkResult.Artifacts) > 10 {
 		scanOpts.Progress = makeProgressFunc(os.Stderr, len(walkResult.Artifacts))
 	}
 
@@ -301,10 +377,10 @@ func runScan(args []string) int {
 	if opts.generateBaseline != "" {
 		bl := baseline.FromScanResult(result)
 		if err := bl.Save(opts.generateBaseline); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to save baseline: %v\n", err)
+			slog.Error("failed to save baseline", "error", err)
 			return exitError
 		}
-		fmt.Fprintf(os.Stderr, "Baseline saved to %s (%d entries)\n", opts.generateBaseline, len(bl.Entries))
+		slog.Info("baseline saved", "path", opts.generateBaseline, "entries", len(bl.Entries))
 		return exitOK
 	}
 
@@ -312,20 +388,20 @@ func runScan(args []string) int {
 	if cfg.BaselinePath != "" {
 		bl, err := baseline.Load(cfg.BaselinePath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to load baseline: %v\n", err)
+			slog.Error("failed to load baseline", "error", err)
 			return exitError
 		}
 		filtered, suppressed := bl.Filter(result.Findings)
 		result.Findings = filtered
 		result.Stats.TotalFindings = len(filtered)
-		if suppressed > 0 && opts.verbose {
-			fmt.Fprintf(os.Stderr, "Suppressed %d findings via baseline\n", suppressed)
+		if suppressed > 0 {
+			slog.Info("suppressed findings via baseline", "count", suppressed)
 		}
 	}
 
 	// Output results.
 	if err := outputResults(result, absRoot, cfg, opts); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: output failed: %v\n", err)
+		slog.Error("output failed", "error", err)
 		return exitError
 	}
 
@@ -357,6 +433,9 @@ func runScan(args []string) int {
 // ---------------------------------------------------------------------
 
 func runInit(args []string) int {
+	// Initialize logger (in case called directly in tests with redirected stderr).
+	initLogger("info", "text")
+
 	dir := "."
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		dir = args[0]
@@ -366,13 +445,13 @@ func runInit(args []string) int {
 
 	// Create directory if it doesn't exist.
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot create directory %s: %v\n", dir, err)
+		slog.Error("cannot create directory", "dir", dir, "error", err)
 		return exitError
 	}
 
 	// Check if file already exists.
 	if _, err := os.Stat(configPath); err == nil {
-		fmt.Fprintf(os.Stderr, "Error: %s already exists\n", configPath)
+		slog.Error("config file already exists", "path", configPath)
 		return exitError
 	}
 
@@ -409,7 +488,7 @@ ml_threshold: 0.50
 # Maximum findings per file (0 = unlimited)
 max_findings_per_file: 0
 
-# Output format: sarif, json, text
+# Output format: sarif, json, jsonl, text, html, pr-comment, github-actions, sbom
 output_format: text
 
 # Color output (text format only)
@@ -417,10 +496,16 @@ color_output: true
 
 # Path to ONNX model file (empty = use bundled default)
 model_path: ""
+
+# Diagnostic log level: debug, info, warn, error
+log_level: info
+
+# Diagnostic log format: text, json
+log_format: text
 `
 
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot write %s: %v\n", configPath, err)
+		slog.Error("cannot write config file", "path", configPath, "error", err)
 		return exitError
 	}
 
@@ -899,15 +984,23 @@ func outputResults(result *scanner.ScanResult, root string, cfg *config.Config, 
 // The file extension for classification is determined by --stdin-ext flag
 // (defaults to .txt if not specified).
 func runScanStdin(opts *scanArgs) int {
+	// Initialize logger for stdin mode (in case runScan was called directly
+	// in tests with redirected stderr).
+	level := "info"
+	if opts.verbose {
+		level = "debug"
+	}
+	initLogger(level, "text")
+
 	// Read all of stdin.
 	content, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to read stdin: %v\n", err)
+		slog.Error("failed to read stdin", "error", err)
 		return exitError
 	}
 
 	if len(content) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: no content received on stdin\n")
+		slog.Error("no content received on stdin")
 		return exitError
 	}
 
@@ -925,13 +1018,13 @@ func runScanStdin(opts *scanArgs) int {
 	art := artifacts.ReadArtifactFromContent(artPath, content)
 
 	if art.Binary {
-		fmt.Fprintf(os.Stderr, "Warning: stdin content appears to be binary\n")
+		slog.Warn("stdin content appears to be binary")
 	}
 
 	// Load config from current directory.
 	cfg, err := config.Load(".")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: configuration error: %v\n", err)
+		slog.Error("configuration error", "error", err)
 		return exitError
 	}
 	applyCLIOverrides(cfg, opts)
@@ -940,7 +1033,7 @@ func runScanStdin(opts *scanArgs) int {
 	if len(cfg.CustomRules) > 0 {
 		customDefs := cfg.ToDetectorPatterns()
 		if err := detectors.RegisterCustomPatterns(customDefs); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: invalid custom rule: %v\n", err)
+			slog.Error("invalid custom rule", "error", err)
 			return exitError
 		}
 	}
@@ -953,7 +1046,7 @@ func runScanStdin(opts *scanArgs) int {
 
 	sc, err := scanner.New(scanOpts)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: scanner initialization failed: %v\n", err)
+		slog.Error("scanner initialization failed", "error", err)
 		return exitError
 	}
 	defer sc.Close()
@@ -963,11 +1056,11 @@ func runScanStdin(opts *scanArgs) int {
 		defaultPath := findDefaultModelPath()
 		if cfg.ModelPath != "" {
 			if err := sc.LoadModel(cfg.ModelPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: ML model load failed: %v (continuing with regex-only)\n", err)
+				slog.Warn("ML model load failed, continuing with regex-only", "error", err)
 			}
 		} else if defaultPath != "" {
 			if err := sc.LoadModel(defaultPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: ML model load failed: %v (continuing with regex-only)\n", err)
+				slog.Warn("ML model load failed, continuing with regex-only", "error", err)
 			}
 		}
 	}
@@ -979,30 +1072,30 @@ func runScanStdin(opts *scanArgs) int {
 	if opts.generateBaseline != "" {
 		bl := baseline.FromScanResult(result)
 		if err := bl.Save(opts.generateBaseline); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to save baseline: %v\n", err)
+			slog.Error("failed to save baseline", "error", err)
 			return exitError
 		}
-		fmt.Fprintf(os.Stderr, "Baseline saved to %s (%d entries)\n", opts.generateBaseline, len(bl.Entries))
+		slog.Info("baseline saved", "path", opts.generateBaseline, "entries", len(bl.Entries))
 		return exitOK
 	}
 
 	if cfg.BaselinePath != "" {
 		bl, err := baseline.Load(cfg.BaselinePath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to load baseline: %v\n", err)
+			slog.Error("failed to load baseline", "error", err)
 			return exitError
 		}
 		filtered, suppressed := bl.Filter(result.Findings)
 		result.Findings = filtered
 		result.Stats.TotalFindings = len(filtered)
-		if suppressed > 0 && opts.verbose {
-			fmt.Fprintf(os.Stderr, "Suppressed %d findings via baseline\n", suppressed)
+		if suppressed > 0 {
+			slog.Info("suppressed findings via baseline", "count", suppressed)
 		}
 	}
 
 	// Output results.
 	if err := outputResults(result, "stdin", cfg, opts); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: output failed: %v\n", err)
+		slog.Error("output failed", "error", err)
 		return exitError
 	}
 
@@ -1100,8 +1193,8 @@ Scan Options:
   --severity, -s <level>   Minimum severity: critical, high, medium, low
   --no-ml                  Disable ML threat detection (regex-only)
   --no-color               Disable ANSI color output (text format)
-  --quiet, -q              Suppress output (exit code only)
-  --verbose, -v            Verbose output
+  --quiet, -q              Suppress diagnostic output (errors only)
+  --verbose, -v            Verbose output (debug-level logging)
   --baseline <file>        Load baseline suppression file
   --generate-baseline <f>  Save current findings as baseline
   --concurrency <N>        Number of parallel workers (default: auto)
@@ -1112,6 +1205,10 @@ Scan Options:
   --extract-archives       Extract archives before scanning (default: true)
   --no-extract-archives    Disable archive extraction
   --config <file>          Path to explicit config file (overrides .aegisgate.yml)
+
+Global Options:
+  --log-level <level>      Log level: debug, info, warn, error (default: info)
+  --log-format <format>    Log format: text, json (default: text)
 
 Stdin/Pipe Support:
   cat file.json | aegisgate-scanner scan - --stdin-ext .json
@@ -1143,8 +1240,8 @@ Options:
   --severity, -s <level>   Minimum severity: critical, high, medium, low
   --no-ml                  Disable ML threat detection (regex-only)
   --no-color               Disable ANSI color output (text format)
-  --quiet, -q              Suppress output (exit code only)
-  --verbose, -v            Verbose output
+  --quiet, -q              Suppress diagnostic output (errors only)
+  --verbose, -v            Verbose output (debug-level logging)
   --baseline <file>        Load baseline suppression file
   --generate-baseline <f>  Save current findings as baseline
   --concurrency <N>        Number of parallel workers (default: auto)
@@ -1155,6 +1252,10 @@ Options:
   --extract-archives       Extract archives before scanning (default: true)
   --no-extract-archives    Disable archive extraction
   --config <file>          Path to explicit config file (overrides .aegisgate.yml)
+
+Global Options:
+  --log-level <level>      Log level: debug, info, warn, error (default: info)
+  --log-format <format>    Log format: text, json (default: text)
 
 Stdin/Pipe Support:
   Use "-" as path to read from stdin:

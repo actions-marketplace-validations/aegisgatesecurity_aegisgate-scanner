@@ -44,7 +44,7 @@ func runScanWithFormat(t *testing.T, format string) string {
 	os.WriteFile(filepath.Join(dir, "test.txt"), []byte(contentWithPII), 0644)
 
 	out := captureStdout(func() {
-		code := runScan([]string{dir, "--no-ml", "--format", format})
+		code := runScan([]string{dir, "--no-ml", "--format", format}, "", "")
 		if code != exitFindings {
 			t.Errorf("expected exitFindings for %s format, got %d", format, code)
 		}
@@ -60,7 +60,7 @@ func runScanWithFormatToFile(t *testing.T, format, outExt string) string {
 	os.WriteFile(filepath.Join(dir, "test.txt"), []byte(contentWithPII), 0644)
 
 	outFile := filepath.Join(dir, "results."+outExt)
-	code := runScan([]string{dir, "--no-ml", "--format", format, "--output", outFile})
+	code := runScan([]string{dir, "--no-ml", "--format", format, "--output", outFile}, "", "")
 	if code != exitFindings {
 		t.Errorf("expected exitFindings for %s format, got %d", format, code)
 	}
@@ -159,7 +159,7 @@ rules:
 	os.WriteFile(filepath.Join(dir, "data.txt"), []byte("Here is a TOPSECRETLEAK in the file"), 0644)
 
 	out := captureStdout(func() {
-		code := runScan([]string{dir, "--no-ml", "--format", "json"})
+		code := runScan([]string{dir, "--no-ml", "--format", "json"}, "", "")
 		if code != exitFindings {
 			t.Errorf("expected exitFindings with plugin rule, got %d", code)
 		}
@@ -187,7 +187,7 @@ rules:
 
 	stderr := captureStderr(func() {
 		captureStdout(func() {
-			code := runScan([]string{dir, "--no-ml", "--format", "json", "--verbose"})
+			code := runScan([]string{dir, "--no-ml", "--format", "json", "--verbose"}, "", "")
 			if code != exitFindings {
 				t.Errorf("expected exitFindings with verbose plugin, got %d", code)
 			}
@@ -227,7 +227,7 @@ func TestRunScan_DiffScanning(t *testing.T) {
 	// Now scan with --diff main (should only scan the changed file).
 	var scanCode int
 	out := captureStdout(func() {
-		scanCode = runScan([]string{dir, "--no-ml", "--format", "json", "--diff", "main"})
+		scanCode = runScan([]string{dir, "--no-ml", "--format", "json", "--diff", "main"}, "", "")
 	})
 	if scanCode != exitFindings {
 		t.Errorf("expected exitFindings from diff scan, got %d", scanCode)
@@ -251,7 +251,7 @@ func TestRunScan_ArchiveExtraction(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("clean content"), 0644)
 
 	out := captureStdout(func() {
-		code := runScan([]string{dir, "--no-ml", "--format", "json", "--extract-archives"})
+		code := runScan([]string{dir, "--no-ml", "--format", "json", "--extract-archives"}, "", "")
 		// Should scan both the readme and the extracted archive content.
 		_ = code
 	})
@@ -718,7 +718,7 @@ func TestRunUpdate_InvalidArgs(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(stderr, "Error") {
+	if !strings.Contains(stderr, "ERROR") {
 		t.Errorf("expected error message in stderr, got: %s", truncate(stderr, 200))
 	}
 }
@@ -736,7 +736,7 @@ func TestRunUpdate_FetchError(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(stderr, "Error") {
+	if !strings.Contains(stderr, "ERROR") {
 		t.Errorf("expected error message in stderr, got: %s", truncate(stderr, 200))
 	}
 }
@@ -1159,7 +1159,7 @@ func TestRunScan_DiffVerbose(t *testing.T) {
 	var scanCode int
 	stderr := captureStderr(func() {
 		captureStdout(func() {
-			scanCode = runScan([]string{dir, "--no-ml", "--format", "json", "--diff", "main", "--verbose"})
+			scanCode = runScan([]string{dir, "--no-ml", "--format", "json", "--diff", "main", "--verbose"}, "", "")
 		})
 	})
 
@@ -1167,7 +1167,7 @@ func TestRunScan_DiffVerbose(t *testing.T) {
 		t.Errorf("expected exitFindings from verbose diff scan, got %d", scanCode)
 	}
 	// Verbose mode should print diff info.
-	if !strings.Contains(stderr, "Diff scan") {
+	if !strings.Contains(stderr, "diff scan") {
 		t.Errorf("expected 'Diff scan' in verbose stderr, got: %s", truncate(stderr, 200))
 	}
 }
@@ -1182,7 +1182,7 @@ func TestRunScan_ArchiveExtractionVerbose(t *testing.T) {
 	var scanCode int
 	stderr := captureStderr(func() {
 		captureStdout(func() {
-			scanCode = runScan([]string{dir, "--no-ml", "--format", "json", "--extract-archives", "--verbose"})
+			scanCode = runScan([]string{dir, "--no-ml", "--format", "json", "--extract-archives", "--verbose"}, "", "")
 		})
 	})
 
@@ -1200,7 +1200,7 @@ func TestRunScan_ArchiveExtractionWithFindings(t *testing.T) {
 
 	var scanCode int
 	out := captureStdout(func() {
-		scanCode = runScan([]string{dir, "--no-ml", "--format", "json", "--extract-archives"})
+		scanCode = runScan([]string{dir, "--no-ml", "--format", "json", "--extract-archives"}, "", "")
 	})
 
 	t.Logf("archive extraction output: %s", truncate(out, 300))
@@ -1226,7 +1226,7 @@ rules:
 	// The plugin registration will fail but the scan should continue.
 	stderr := captureStderr(func() {
 		captureStdout(func() {
-			runScan([]string{dir, "--no-ml", "--format", "json"})
+			runScan([]string{dir, "--no-ml", "--format", "json"}, "", "")
 		})
 	})
 

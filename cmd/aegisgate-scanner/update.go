@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"runtime"
@@ -91,9 +92,12 @@ const (
 
 // runUpdate executes the update command.
 func runUpdate(args []string) int {
+	// Initialize logger (in case called directly in tests with redirected stderr).
+	initLogger("info", "text")
+
 	opts, err := parseUpdateArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		slog.Error("failed to parse update arguments", "error", err)
 		printUpdateUsage()
 		return exitError
 	}
@@ -107,7 +111,7 @@ func runUpdate(args []string) int {
 
 	result, err := performUpdate(*opts, Version)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: update failed: %v\n", err)
+		slog.Error("update failed", "error", err)
 		return exitError
 	}
 
