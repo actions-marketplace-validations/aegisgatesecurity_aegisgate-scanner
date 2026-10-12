@@ -86,6 +86,10 @@ type Finding struct {
 
 	// MLVariant is the normalization variant that triggered ML detection.
 	MLVariant string
+
+	// Remediation provides actionable guidance on how to fix the finding.
+	// Populated by getRemediation() based on category and rule ID.
+	Remediation string
 }
 
 // ScanOptions controls the scanner behavior.
@@ -391,6 +395,7 @@ func (s *Scanner) scanRegex(art artifacts.Artifact) []Finding {
 			EndColumn:      endCol,
 			MatchedText:    truncate(m.Value, 200),
 			DetectionLayer: "regex",
+			Remediation:    getRemediation(m.Category, m.Category, m.Severity),
 		}
 		findings = append(findings, finding)
 	}
@@ -434,6 +439,7 @@ func (s *Scanner) scanML(art artifacts.Artifact, regexLines map[int]bool) []Find
 				DetectionLayer: "ml",
 				MLScore:        score.Score,
 				MLVariant:      score.Variant,
+				Remediation:    getRemediation("ml-prompt-injection", "ml_prompt_injection", detectors.SeverityHigh),
 			}
 			findings = append(findings, finding)
 		}

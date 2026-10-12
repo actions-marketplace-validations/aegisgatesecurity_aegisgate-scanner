@@ -247,6 +247,45 @@ jobs:
           echo "✅ No data races detected (evasion suite skipped for time)" >> $GITHUB_STEP_SUMMARY
 
   # ========================================
+  # Benchmark — performance regression detection
+  # ========================================
+  benchmark:
+    needs: [lint, test-lite]
+    name: Benchmark Regression Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Run benchmarks
+        run: |
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Benchmark | Time | Allocations |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|------|-------------|" >> $GITHUB_STEP_SUMMARY
+          go test -bench=. -benchmem -count=1 -timeout=120s ./pkg/scanner/ 2>&1 | tee bench-output.txt
+          # Parse benchmark results into table
+          while IFS= read -r line; do
+            if echo "$line" | grep -q '^Benchmark'; then
+              NAME=$(echo "$line" | awk '{print $1}')
+              NS_PER_OP=$(echo "$line" | awk '{print $2 " " $3}')
+              ALLOCS=$(echo "$line" | grep -o '[0-9]* allocs/op' || echo "N/A")
+              echo "| $NAME | $NS_PER_OP | $ALLOCS |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done < bench-output.txt
+      - name: Check performance regression (1MB file < 30s)
+        run: |
+          # Extract LargeFile benchmark time in nanoseconds
+          LARGE_TIME=$(grep 'BenchmarkScanRegex_LargeFile' bench-output.txt | awk '{print $2}' || echo "0")
+          if [ -n "$LARGE_TIME" ] && [ "$LARGE_TIME" -gt 30000000000 ]; then
+            echo "❌ Performance regression: 1MB scan took ${LARGE_TIME}ns (> 30s threshold)"
+            exit 1
+          fi
+          echo "✅ No performance regression detected"
+
+  # ========================================
   # Build — verify binary compiles (both modes)
   # ========================================
   build:

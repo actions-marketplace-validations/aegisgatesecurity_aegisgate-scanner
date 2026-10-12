@@ -60,6 +60,7 @@ type jsonFinding struct {
 	DetectionLayer string  `json:"detection_layer"`
 	MLScore        float64 `json:"ml_score,omitempty"`
 	MLVariant      string  `json:"ml_variant,omitempty"`
+	Remediation    string  `json:"remediation,omitempty"`
 }
 
 // jsonStats holds scan statistics.
@@ -118,6 +119,7 @@ func FormatJSON(result *scanner.ScanResult, root, toolVersion string) ([]byte, e
 			DetectionLayer: f.DetectionLayer,
 			MLScore:        f.MLScore,
 			MLVariant:      f.MLVariant,
+			Remediation:    f.Remediation,
 		}
 		report.Findings = append(report.Findings, jf)
 	}
