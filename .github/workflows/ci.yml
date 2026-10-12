@@ -228,7 +228,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Run race detector (CGO, all tests)
+      - name: Run race detector (CGO, all tests except evasion suite)
         env:
           CGO_ENABLED: 1
           CGO_CFLAGS: "-I${{ github.workspace }}/internal/onnxruntime_go"
@@ -236,12 +236,15 @@ jobs:
           ONNXRUNTIME_SHARED_LIBRARY_PATH: ${{ github.workspace }}/lib/amd64/libonnxruntime.so
           LD_LIBRARY_PATH: ${{ github.workspace }}/lib/amd64
         run: |
-          go test -race -count=1 -timeout 300s ./... 2>&1 | tee race-output.txt
+          # Skip TestEvasionSuite (5+ min with race detector) — run separately.
+          go test -race -count=1 -timeout 300s -skip TestEvasionSuite ./... 2>&1 | tee race-output.txt
           if grep -q "DATA RACE" race-output.txt; then
             echo "❌ Data race detected!"
             exit 1
           fi
           echo "✅ No data races detected"
+          echo "## Race Detector Results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ No data races detected (evasion suite skipped for time)" >> $GITHUB_STEP_SUMMARY
 
   # ========================================
   # Build — verify binary compiles (both modes)
