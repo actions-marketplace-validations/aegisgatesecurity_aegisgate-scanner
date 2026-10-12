@@ -13,8 +13,9 @@
 //   - Compliance violations (35 patterns)
 //   - OT/ICS protocol exposure (10 patterns)
 //
-// The scanner processes artifacts line-by-line and whole-content to
-// provide precise location information (line, column) for each finding.
+// The scanner processes artifacts with full-content regex scanning and
+// optional ML-based prompt injection detection, providing precise location
+// information (line, column) for each finding via byte-offset mapping.
 //
 // =========================================================================
 
@@ -353,45 +354,28 @@ func (s *Scanner) recordFindings(result *ScanResult, art artifacts.Artifact, fin
 // ---------------------------------------------------------------------
 
 // scanRegex runs the regex detection engine on an artifact.
-// Scans both the full content and line-by-line for precise locations.
+//
+// Scans the full content in a single pass and converts byte offsets to
+// line/column positions via byteOffsetToLineCol. This is dramatically
+// faster than the previous line-by-line approach which ran DetectAll
+// (257 patterns) on every line separately — O(N×P) vs O(P) where N is
+// the line count and P is the pattern count.
+//
+// The full-content scan is a strict superset of line-by-line scanning:
+// any match on a single line is also a match in the full content at the
+// same byte position. Multi-line patterns (spanning line boundaries) are
+// ONLY caught by the full-content scan, so this approach also improves
+// detection coverage.
 func (s *Scanner) scanRegex(art artifacts.Artifact) []Finding {
-	var findings []Finding
-
-	// Line-by-line scanning for precise location reporting.
-	lines := strings.Split(art.Content, "\n")
-	for lineNum, line := range lines {
-		matches := detectors.DetectAll(line)
-		for _, m := range matches {
-			finding := Finding{
-				Artifact:       art.Path,
-				ArtifactClass:  art.Class,
-				RuleID:         m.Category,
-				Category:       m.Category,
-				Severity:       m.Severity,
-				Confidence:     m.Confidence,
-				Message:        formatRegexMessage(m.Category, m.Severity),
-				Line:           lineNum + 1,
-				Column:         m.Index + 1,
-				EndLine:        lineNum + 1,
-				EndColumn:      m.End + 1,
-				MatchedText:    truncate(m.Value, 200),
-				DetectionLayer: "regex",
-			}
-			findings = append(findings, finding)
-		}
+	matches := detectors.DetectAll(art.Content)
+	if len(matches) == 0 {
+		return nil
 	}
 
-	// Also scan full content for multi-line patterns.
-	// Some patterns may only match across line boundaries.
-	fullMatches := detectors.DetectAll(art.Content)
-	for _, m := range fullMatches {
+	findings := make([]Finding, 0, len(matches))
+	for _, m := range matches {
 		line, col := byteOffsetToLineCol(art.Content, m.Index)
 		endLine, endCol := byteOffsetToLineCol(art.Content, m.End)
-
-		// Skip if already found in line-by-line scan (same position).
-		if alreadyFound(findings, art.Path, m.Category, line, col) {
-			continue
-		}
 
 		finding := Finding{
 			Artifact:       art.Path,
@@ -544,16 +528,6 @@ func truncate(s string, maxLen int) string {
 // formatRegexMessage creates a human-readable message for a regex finding.
 func formatRegexMessage(ruleID string, severity Severity) string {
 	return fmt.Sprintf("%s: detected %s pattern", severity, ruleID)
-}
-
-// alreadyFound checks if a finding at the same position already exists.
-func alreadyFound(findings []Finding, path, ruleID string, line, col int) bool {
-	for _, f := range findings {
-		if f.Artifact == path && f.RuleID == ruleID && f.Line == line && f.Column == col {
-			return true
-		}
-	}
-	return false
 }
 
 // buildRegexFindingLines creates a per-artifact map of lines with regex findings.

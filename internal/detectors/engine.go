@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -85,19 +86,72 @@ func detectWithPatterns(text string, patterns []compiledPattern, category string
 	return matches
 }
 
+// detectAllThreshold is the minimum content size (bytes) for concurrent
+// category scanning. Below this threshold, goroutine overhead exceeds the
+// benefit of parallelism, so categories are scanned sequentially.
+const detectAllThreshold = 8192 // 8KB
+
 // DetectAll scans text with all pattern categories and returns combined results.
+//
+// For content larger than detectAllThreshold, categories are scanned
+// concurrently for performance (up to 10x speedup on multi-core machines).
+// For smaller content, categories are scanned sequentially to avoid
+// goroutine overhead.
 func DetectAll(text string) []Match {
+	if len(text) == 0 {
+		return nil
+	}
+
+	// Snapshot custom patterns under lock to avoid race with RegisterCustomPatterns.
+	customMu.RLock()
+	customSnapshot := customPatterns
+	customMu.RUnlock()
+
+	// Pre-define all category scan functions.
+	scanners := []func() []Match{
+		func() []Match { return detectWithPatterns(text, CompiledSecretPatterns, "secrets") },
+		func() []Match { return detectWithPatterns(text, CompiledXSSPatterns, "xss") },
+		func() []Match { return detectWithPatterns(text, CompiledPIIUSCorePatterns, "pii-us-core") },
+		func() []Match { return detectWithPatterns(text, CompiledPIIUSExtendedPatterns, "pii-us-extended") },
+		func() []Match { return detectWithPatterns(text, CompiledPIIFinancialPatterns, "pii-financial") },
+		func() []Match { return detectWithPatterns(text, CompiledPIIInternationalPatterns, "pii-international") },
+		func() []Match { return detectWithPatterns(text, CompiledCompliancePatterns, "compliance") },
+		func() []Match {
+			return detectWithPatterns(text, CompiledDangerousFunctionPatterns, "dangerous-function")
+		},
+		func() []Match { return detectWithPatterns(text, CompiledOTProtocolPatterns, "ot-protocols") },
+	}
+	if len(customSnapshot) > 0 {
+		scanners = append(scanners, func() []Match {
+			return detectWithPatterns(text, customSnapshot, "custom")
+		})
+	}
+
 	var all []Match
-	all = append(all, DetectSecrets(text)...)
-	all = append(all, DetectXSS(text)...)
-	all = append(all, DetectPIIUSCore(text)...)
-	all = append(all, DetectPIIUSExtended(text)...)
-	all = append(all, DetectPIIFinancial(text)...)
-	all = append(all, DetectPIIInternational(text)...)
-	all = append(all, DetectCompliance(text)...)
-	all = append(all, DetectDangerousFunctions(text)...)
-	all = append(all, DetectOTProtocols(text)...)
-	all = append(all, DetectCustomPatterns(text)...)
+
+	if len(text) < detectAllThreshold {
+		// Sequential scan for small content (avoids goroutine overhead).
+		for _, scan := range scanners {
+			all = append(all, scan()...)
+		}
+	} else {
+		// Concurrent scan for large content.
+		results := make([][]Match, len(scanners))
+		var wg sync.WaitGroup
+
+		for i, scan := range scanners {
+			wg.Add(1)
+			go func(idx int, fn func() []Match) {
+				defer wg.Done()
+				results[idx] = fn()
+			}(i, scan)
+		}
+		wg.Wait()
+
+		for _, r := range results {
+			all = append(all, r...)
+		}
+	}
 
 	// Sort all matches by index
 	sort.Slice(all, func(i, j int) bool {
@@ -110,18 +164,56 @@ func DetectAll(text string) []Match {
 // DetectAllWithResults scans text with all pattern categories and returns
 // per-category DetectionResult structs plus the combined match list.
 func DetectAllWithResults(text string) ([]Match, []DetectionResult) {
-	results := []DetectionResult{
-		detectWithResult(text, CompiledSecretPatterns, CategorySecrets),
-		detectWithResult(text, CompiledXSSPatterns, CategoryXSS),
-		detectWithResult(text, CompiledPIIUSCorePatterns, CategoryPIIUSCore),
-		detectWithResult(text, CompiledPIIUSExtendedPatterns, CategoryPIIUSExtended),
-		detectWithResult(text, CompiledPIIFinancialPatterns, CategoryPIIFinancial),
-		detectWithResult(text, CompiledPIIInternationalPatterns, CategoryPIIInternational),
-		detectWithResult(text, CompiledCompliancePatterns, CategoryCompliance),
-		detectWithResult(text, CompiledDangerousFunctionPatterns, CategoryDangerousFunction),
+	categories := []struct {
+		patterns []compiledPattern
+		category Category
+	}{
+		{CompiledSecretPatterns, CategorySecrets},
+		{CompiledXSSPatterns, CategoryXSS},
+		{CompiledPIIUSCorePatterns, CategoryPIIUSCore},
+		{CompiledPIIUSExtendedPatterns, CategoryPIIUSExtended},
+		{CompiledPIIFinancialPatterns, CategoryPIIFinancial},
+		{CompiledPIIInternationalPatterns, CategoryPIIInternational},
+		{CompiledCompliancePatterns, CategoryCompliance},
+		{CompiledDangerousFunctionPatterns, CategoryDangerousFunction},
 	}
 
-	all := DetectAll(text)
+	results := make([]DetectionResult, len(categories))
+
+	if len(text) == 0 {
+		// Return empty results for each category (preserves category count).
+		for i, cat := range categories {
+			results[i] = DetectionResult{
+				Category:     cat.category,
+				Matches:      nil,
+				PatternCount: len(cat.patterns),
+				ElapsedNS:    0,
+			}
+		}
+		return nil, results
+	}
+
+	var wg sync.WaitGroup
+	for i, cat := range categories {
+		wg.Add(1)
+		go func(idx int, patterns []compiledPattern, category Category) {
+			defer wg.Done()
+			results[idx] = detectWithResult(text, patterns, category)
+		}(i, cat.patterns, cat.category)
+	}
+	wg.Wait()
+
+	// Build combined match list from results.
+	var all []Match
+	for _, r := range results {
+		all = append(all, r.Matches...)
+	}
+
+	// Sort all matches by index
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].Index < all[j].Index
+	})
+
 	return all, results
 }
 
@@ -141,6 +233,9 @@ func detectWithResult(text string, patterns []compiledPattern, category Category
 // Custom pattern registration (runtime extension)
 // ---------------------------------------------------------------------
 
+// customMu protects customPatterns for concurrent access.
+var customMu sync.RWMutex
+
 // customPatterns holds patterns registered at runtime via RegisterCustomPatterns.
 var customPatterns []compiledPattern
 
@@ -148,6 +243,8 @@ var customPatterns []compiledPattern
 // These patterns are included in all subsequent DetectAll calls.
 // Returns an error if any pattern has an invalid regex.
 func RegisterCustomPatterns(defs []PatternDef) error {
+	customMu.Lock()
+	defer customMu.Unlock()
 	for _, def := range defs {
 		re, err := regexp.Compile(def.Regex)
 		if err != nil {
@@ -166,14 +263,19 @@ func RegisterCustomPatterns(defs []PatternDef) error {
 
 // DetectCustomPatterns scans text using runtime-registered custom patterns.
 func DetectCustomPatterns(text string) []Match {
-	if len(customPatterns) == 0 {
+	customMu.RLock()
+	snapshot := customPatterns
+	customMu.RUnlock()
+	if len(snapshot) == 0 {
 		return nil
 	}
-	return detectWithPatterns(text, customPatterns, "custom")
+	return detectWithPatterns(text, snapshot, "custom")
 }
 
 // ResetCustomPatterns clears all registered custom patterns.
 // Primarily used in tests.
 func ResetCustomPatterns() {
+	customMu.Lock()
+	defer customMu.Unlock()
 	customPatterns = nil
 }

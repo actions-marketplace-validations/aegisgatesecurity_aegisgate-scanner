@@ -942,54 +942,6 @@ func TestFormatRegexMessage(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// Helper: alreadyFound
-// ---------------------------------------------------------------------
-
-func TestAlreadyFound_Empty(t *testing.T) {
-	result := alreadyFound(nil, "test.txt", "secret_aws_key", 1, 1)
-	if result {
-		t.Error("alreadyFound on empty findings should return false")
-	}
-}
-
-func TestAlreadyFound_Found(t *testing.T) {
-	findings := []Finding{
-		{Artifact: "test.txt", RuleID: "secret_aws_key", Line: 1, Column: 5},
-	}
-	result := alreadyFound(findings, "test.txt", "secret_aws_key", 1, 5)
-	if !result {
-		t.Error("alreadyFound should return true for matching finding")
-	}
-}
-
-func TestAlreadyFound_NotFound(t *testing.T) {
-	findings := []Finding{
-		{Artifact: "test.txt", RuleID: "secret_aws_key", Line: 1, Column: 5},
-	}
-	tests := []struct {
-		name   string
-		path   string
-		ruleID string
-		line   int
-		col    int
-	}{
-		{"different_path", "other.txt", "secret_aws_key", 1, 5},
-		{"different_rule", "test.txt", "pii_ssn", 1, 5},
-		{"different_line", "test.txt", "secret_aws_key", 2, 5},
-		{"different_col", "test.txt", "secret_aws_key", 1, 6},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := alreadyFound(findings, tt.path, tt.ruleID, tt.line, tt.col)
-			if result {
-				t.Error("alreadyFound should return false for non-matching finding")
-			}
-		})
-	}
-}
-
-// ---------------------------------------------------------------------
 // Helper: splitSegments
 // ---------------------------------------------------------------------
 
