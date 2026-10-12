@@ -58,29 +58,36 @@ const (
 )
 
 func main() {
-	if len(os.Args) < 2 {
+	os.Exit(run(os.Args))
+}
+
+// run dispatches CLI commands and returns the appropriate exit code.
+// Extracted from main() so it can be unit-tested without os.Exit killing
+// the test process.
+func run(argv []string) int {
+	if len(argv) < 2 {
 		printUsage()
-		os.Exit(exitError)
+		return exitError
 	}
 
-	command := os.Args[1]
-	args := os.Args[2:]
+	command := argv[1]
+	args := argv[2:]
 
 	switch command {
 	case "scan":
-		os.Exit(runScan(args))
+		return runScan(args)
 	case "init":
-		os.Exit(runInit(args))
+		return runInit(args)
 	case "version":
 		printVersion()
-		os.Exit(exitOK)
+		return exitOK
 	case "help", "--help", "-h":
 		printUsage()
-		os.Exit(exitOK)
+		return exitOK
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", command)
 		printUsage()
-		os.Exit(exitError)
+		return exitError
 	}
 }
 
