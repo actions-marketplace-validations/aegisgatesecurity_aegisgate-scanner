@@ -57,6 +57,29 @@ type Match struct {
 	End int
 }
 
+// Language represents a programming or markup language for language-aware scanning.
+type Language string
+
+const (
+	LangAny     Language = "" // Matches all languages (default)
+	LangPython  Language = "python"
+	LangJS      Language = "javascript"
+	LangTS      Language = "typescript"
+	LangGo      Language = "go"
+	LangJava    Language = "java"
+	LangC       Language = "c"
+	LangCPP     Language = "cpp"
+	LangRuby    Language = "ruby"
+	LangPHP     Language = "php"
+	LangShell   Language = "shell"
+	LangYAML    Language = "yaml"
+	LangJSON    Language = "json"
+	LangXML     Language = "xml"
+	LangHTML    Language = "html"
+	LangSQL     Language = "sql"
+	LangGeneric Language = "generic"
+)
+
 // PatternDef defines a single regex detection pattern.
 type PatternDef struct {
 	// Name is the pattern identifier (e.g., "secret_aws_key")
@@ -73,6 +96,11 @@ type PatternDef struct {
 
 	// Category is the detection category (optional, used for custom rules).
 	Category Category
+
+	// Languages restricts this pattern to specific languages.
+	// Empty (LangAny) means the pattern applies to all languages.
+	// Multiple languages can be specified (e.g., []Language{LangPython, LangJS}).
+	Languages []Language
 }
 
 // DetectionResult holds the results from scanning text with all patterns

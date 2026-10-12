@@ -97,6 +97,8 @@ func run(argv []string) int {
 	switch command {
 	case "scan":
 		return runScan(args, logLevel, logFormat)
+	case "scan-history":
+		return runScanHistory(args, logLevel, logFormat)
 	case "init":
 		return runInit(args)
 	case "version":
@@ -426,6 +428,219 @@ func runScan(args []string, globalLogLevel, globalLogFormat string) int {
 	}
 
 	return exitOK
+}
+
+// ---------------------------------------------------------------------
+// scan-history command
+// ---------------------------------------------------------------------
+
+func runScanHistory(args []string, globalLogLevel, globalLogFormat string) int {
+	// Parse flags
+	var (
+		format     = "text"
+		outputFile string
+		maxCommits = 1000
+		baseBranch string
+		noMerge    = true
+		sinceDate  string
+		untilDate  string
+	)
+
+	// Simple flag parsing
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--format", "-f":
+			if i+1 < len(args) {
+				format = args[i+1]
+				i++
+			}
+		case "--output", "-o":
+			if i+1 < len(args) {
+				outputFile = args[i+1]
+				i++
+			}
+		case "--max-commits":
+			if i+1 < len(args) {
+				fmt.Sscanf(args[i+1], "%d", &maxCommits)
+				i++
+			}
+		case "--base-branch":
+			if i+1 < len(args) {
+				baseBranch = args[i+1]
+				i++
+			}
+		case "--include-merges":
+			noMerge = false
+		case "--since":
+			if i+1 < len(args) {
+				sinceDate = args[i+1]
+				i++
+			}
+		case "--until":
+			if i+1 < len(args) {
+				untilDate = args[i+1]
+				i++
+			}
+		case "--help", "-h":
+			fmt.Fprint(os.Stderr, `Usage: aegisgate-scanner scan-history [repo-path] [flags]
+
+Scan git commit history for secrets and sensitive data.
+
+Flags:
+  --format <fmt>       Output format: text, json, jsonl, sarif, html, sbom (default: text)
+  --output <file>      Write output to file (default: stdout)
+  --max-commits <n>    Maximum commits to scan (default: 1000)
+  --base-branch <br>   Only scan commits not in this branch (e.g., "main")
+  --include-merges     Include merge commits (default: skip)
+  --since <date>       Only scan commits after this date (YYYY-MM-DD)
+  --until <date>       Only scan commits before this date (YYYY-MM-DD)
+
+Examples:
+  aegisgate-scanner scan-history .
+  aegisgate-scanner scan-history . --format json --output history.json
+  aegisgate-scanner scan-history . --max-commits 500 --since 2026-01-01
+`)
+			return exitOK
+		default:
+			positional = append(positional, args[i])
+		}
+	}
+
+	repoPath := "."
+	if len(positional) > 0 {
+		repoPath = positional[0]
+	}
+
+	// Resolve to absolute path
+	absPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		slog.Error("failed to resolve path", "path", repoPath, "error", err)
+		return exitError
+	}
+
+	// Build history options
+	opts := scanner.DefaultHistoryOptions()
+	opts.MaxCommits = maxCommits
+	opts.BaseBranch = baseBranch
+	opts.IncludeMergeCommits = !noMerge
+
+	if sinceDate != "" {
+		t, err := time.Parse("2006-01-02", sinceDate)
+		if err != nil {
+			slog.Error("invalid --since date", "date", sinceDate, "error", err)
+			return exitError
+		}
+		opts.Since = t
+	}
+	if untilDate != "" {
+		t, err := time.Parse("2006-01-02", untilDate)
+		if err != nil {
+			slog.Error("invalid --until date", "date", untilDate, "error", err)
+			return exitError
+		}
+		opts.Until = t
+	}
+
+	slog.Info("starting history scan", "repo", absPath, "max_commits", opts.MaxCommits)
+
+	result, err := scanner.ScanHistory(absPath, opts)
+	if err != nil {
+		slog.Error("history scan failed", "error", err)
+		return exitError
+	}
+
+	slog.Info("history scan complete",
+		"commits_scanned", result.CommitsScanned,
+		"commits_skipped", result.CommitsSkipped,
+		"diffs_scanned", result.DiffsScanned,
+		"findings", len(result.Findings),
+		"elapsed", result.Elapsed.String(),
+	)
+
+	// Convert history findings to regular findings for output
+	findings := make([]scanner.Finding, len(result.Findings))
+	for i, hf := range result.Findings {
+		findings[i] = hf.Finding
+	}
+
+	// Build a scan result for output formatting
+	scanResult := &scanner.ScanResult{
+		Findings: findings,
+		Stats: scanner.ScanStats{
+			FilesScanned:  result.DiffsScanned,
+			TotalFindings: len(findings),
+			BySeverity:    make(map[scanner.Severity]int),
+			ByCategory:    make(map[string]int),
+			ByLayer:       make(map[string]int),
+		},
+	}
+	for _, f := range findings {
+		scanResult.Stats.BySeverity[f.Severity]++
+		scanResult.Stats.ByCategory[f.Category]++
+		scanResult.Stats.ByLayer[f.DetectionLayer]++
+	}
+
+	// Format output
+	var outBuf []byte
+	switch format {
+	case "json":
+		outBuf, _ = output.FormatJSON(scanResult, absPath, Version)
+	case "jsonl":
+		outBuf, _ = output.FormatJSONL(scanResult, absPath, Version)
+	case "sarif":
+		outBuf, _ = output.FormatSARIF(scanResult, Version)
+	case "html":
+		outBuf, _ = output.FormatHTML(scanResult, absPath, Version)
+	case "sbom":
+		outBuf, _ = output.FormatSBOM(scanResult, absPath, Version)
+	case "text":
+		fallthrough
+	default:
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Git History Scan Results\n"))
+		sb.WriteString(fmt.Sprintf("=========================\n"))
+		sb.WriteString(fmt.Sprintf("Commits scanned: %d\n", result.CommitsScanned))
+		sb.WriteString(fmt.Sprintf("Commits skipped: %d\n", result.CommitsSkipped))
+		sb.WriteString(fmt.Sprintf("Diffs scanned:   %d\n", result.DiffsScanned))
+		sb.WriteString(fmt.Sprintf("Findings:        %d\n", len(result.Findings)))
+		sb.WriteString(fmt.Sprintf("Elapsed:         %s\n\n", result.Elapsed))
+
+		for _, hf := range result.Findings {
+			commitShort := hf.CommitHash
+			if len(commitShort) > 12 {
+				commitShort = commitShort[:12]
+			}
+			sb.WriteString(fmt.Sprintf("[%s] %s\n", hf.Severity, hf.RuleID))
+			sb.WriteString(fmt.Sprintf("  Commit: %s (%s)\n", commitShort, hf.CommitDate))
+			sb.WriteString(fmt.Sprintf("  File:   %s:%d\n", hf.FilePath, hf.Line))
+			sb.WriteString(fmt.Sprintf("  Match:  %s\n", truncateString(hf.MatchedText, 80)))
+			sb.WriteString(fmt.Sprintf("  Remediation: %s\n\n", hf.Remediation))
+		}
+		outBuf = []byte(sb.String())
+	}
+
+	if outputFile != "" {
+		if err := os.WriteFile(outputFile, outBuf, 0644); err != nil {
+			slog.Error("failed to write output", "file", outputFile, "error", err)
+			return exitError
+		}
+		slog.Info("output written", "file", outputFile)
+	} else {
+		os.Stdout.Write(outBuf)
+	}
+
+	if len(findings) > 0 {
+		return exitFindings
+	}
+	return exitOK
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
 
 // ---------------------------------------------------------------------
@@ -1179,12 +1394,13 @@ Usage:
   aegisgate-scanner <command> [options]
 
 Commands:
-  scan [path]    Scan a directory for security threats in AI artifacts
-  init [dir]     Create a .aegisgate.yml configuration file
-  version        Print version information
-  update         Check for and install updates
-  doctor [path]  Self-test: scan own codebase and report health
-  help           Show this help message
+  scan [path]         Scan a directory for security threats in AI artifacts
+  scan-history [path] Scan git commit history for leaked secrets
+  init [dir]          Create a .aegisgate.yml configuration file
+  version             Print version information
+  update              Check for and install updates
+  doctor [path]       Self-test: scan own codebase and report health
+  help                Show this help message
 
 Scan Options:
   --format, -f <format>    Output format: sarif, json, jsonl, text, html, pr-comment,

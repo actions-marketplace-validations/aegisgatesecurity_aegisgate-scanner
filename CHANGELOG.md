@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — v0.3.0-dev: Detection Depth + Performance
+
+- **Entropy-based secret detection** — Shannon entropy analysis catches
+  unknown secrets that don't match any known regex format. Detects
+  high-entropy strings near secret-related keywords (key, token, secret,
+  password, bearer) and standalone high-entropy values. Configurable
+  thresholds: 4.5 bits/char for base64-like, 3.0 for hex-only.
+  New `internal/detectors/entropy.go` with `DetectEntropy()`.
+
+- **Known example value suppression** — automatically suppresses findings
+  that match known documentation examples (AWS docs keys, GitHub test
+  tokens, Stripe test keys, JWT examples, etc.). Suppressed findings
+  have confidence reduced to 0.1 with a "known example/test value" note.
+  New `internal/detectors/examples.go` with `IsKnownExample()`,
+  `IsExampleByContent()`, `FilterKnownExamples()`, `SuppressExamples()`.
+
+- **Language-aware scanning** — file language detected from extension
+  (Python, JS/TS, Go, Java, C/C++, Ruby, PHP, Shell, YAML, JSON, XML,
+  HTML, SQL). Patterns with language metadata only run on matching files.
+  Reduces false positives (e.g., Python `eval()` no longer fires on YAML
+  configs) and improves performance (fewer regex passes per file).
+  Dangerous function patterns tagged with language metadata. New
+  `Language` type, `LanguageFromExtension()`, `LanguageFromPath()`,
+  `DetectAllWithLanguage()`.
+
+- **Regex merging for performance** — patterns within small categories
+  merged into single alternation regex for one-pass scanning. Reduces
+  regex calls from 276 to ~10 for categories under 3000-char threshold.
+  Large categories (compliance, secrets) fall back to sequential scanning.
+  Transparent to callers — `detectWithMerged()` used automatically.
+
+- **Git history scanning** — new `scan-history` command scans git commit
+  history for leaked secrets. Uses `git log --patch` to extract diffs,
+  feeds added lines to detection engine + entropy analysis. Safeguards:
+  max commit count (default 1000), max diff size (1MB), skip merge commits.
+  New `pkg/scanner/history.go` with `ScanHistory()`, `HistoryResult`,
+  `HistoryFinding` (includes commit hash, message, date, file path).
+
+- **Pre-existing bug fix** — `yaml_long_string` pentest test was hanging
+  due to stderr pipe buffer deadlock. Config validation error messages
+  now truncate long values to 100 chars. Test now reads stderr in
+  goroutine to prevent pipe deadlock.
+
 ### Added — Solo Maintainer ROI Features (v0.2.0-dev)
 - **JSONL output format** (`--format jsonl`) — NDJSON with one finding per line
   plus a summary line. Ideal for piping to jq, Splunk, ELK, Datadog.

@@ -207,7 +207,7 @@ func (s *Scanner) Close() error {
 func (s *Scanner) ScanArtifact(art artifacts.Artifact, opts ScanOptions) []Finding {
 	var findings []Finding
 
-	// --- Layer 1: Regex detection ---
+	// --- Layer 1: Regex detection (language-aware) ---
 	regexFindings := s.scanRegex(art)
 
 	// Filter out disabled rules.
@@ -215,7 +215,18 @@ func (s *Scanner) ScanArtifact(art artifacts.Artifact, opts ScanOptions) []Findi
 		regexFindings = filterDisabledRules(regexFindings, opts.DisableRules)
 	}
 
+	// --- Layer 1b: Known example suppression ---
+	// Suppress findings that match known documentation/test values.
+	regexFindings = s.suppressKnownExamples(regexFindings)
+
 	findings = append(findings, regexFindings...)
+
+	// --- Layer 1c: Entropy detection (unknown secrets) ---
+	// Run entropy-based detection to catch secrets that don't match
+	// any known regex pattern. Only run if the file hasn't already
+	// been flagged by regex for the same region.
+	entropyFindings := s.scanEntropy(art, regexFindings)
+	findings = append(findings, entropyFindings...)
 
 	// Build per-artifact regex finding map for ML supplementary logic.
 	regexLines := buildRegexFindingLines(regexFindings)
@@ -369,19 +380,17 @@ func (s *Scanner) recordFindings(result *ScanResult, art artifacts.Artifact, fin
 
 // scanRegex runs the regex detection engine on an artifact.
 //
-// Scans the full content in a single pass and converts byte offsets to
-// line/column positions via byteOffsetToLineCol. This is dramatically
-// faster than the previous line-by-line approach which ran DetectAll
-// (257 patterns) on every line separately — O(N×P) vs O(P) where N is
-// the line count and P is the pattern count.
+// Uses language-aware scanning: detects the file's language from its
+// extension and filters patterns accordingly. This reduces false positives
+// (e.g., Python patterns don't run on YAML files) and improves performance
+// (fewer regex passes per file).
 //
-// The full-content scan is a strict superset of line-by-line scanning:
-// any match on a single line is also a match in the full content at the
-// same byte position. Multi-line patterns (spanning line boundaries) are
-// ONLY caught by the full-content scan, so this approach also improves
-// detection coverage.
+// Uses merged regex alternation for one-pass scanning per category
+// (10x fewer regex calls than the previous sequential approach).
 func (s *Scanner) scanRegex(art artifacts.Artifact) []Finding {
-	matches := detectors.DetectAll(art.Content)
+	// Detect language from file path for language-aware filtering.
+	lang := detectors.LanguageFromPath(art.Path)
+	matches := detectors.DetectAllWithLanguage(art.Content, lang)
 	if len(matches) == 0 {
 		return nil
 	}
@@ -613,4 +622,74 @@ func filterDisabledRules(findings []Finding, disabled []string) []Finding {
 		}
 	}
 	return filtered
+}
+
+// suppressKnownExamples filters out findings that match known documentation
+// example values, test tokens, and placeholder data. Suppressed findings
+// have their confidence reduced to 0.1 but are still returned (just with
+// lower confidence) so they remain visible in verbose output.
+func (s *Scanner) suppressKnownExamples(findings []Finding) []Finding {
+	if len(findings) == 0 {
+		return findings
+	}
+	filtered := findings[:0]
+	for _, f := range findings {
+		if detectors.IsKnownExample(f.MatchedText) || detectors.IsExampleByContent(f.MatchedText) {
+			// Reduce confidence but keep the finding.
+			f.Confidence = 0.1
+			f.Message = f.Message + " (known example/test value)"
+		}
+		filtered = append(filtered, f)
+	}
+	return filtered
+}
+
+// scanEntropy runs Shannon entropy detection on an artifact to catch
+// unknown secrets that don't match any regex pattern. It avoids
+// double-reporting regions already flagged by regex.
+func (s *Scanner) scanEntropy(art artifacts.Artifact, regexFindings []Finding) []Finding {
+	entropyMatches := detectors.DetectEntropy(art.Content)
+	if len(entropyMatches) == 0 {
+		return nil
+	}
+
+	// Build a set of byte ranges already covered by regex findings
+	// to avoid duplicate detections.
+	type rangeKey struct{ start, end int }
+	covered := make(map[rangeKey]bool, len(regexFindings))
+	for _, f := range regexFindings {
+		// Convert line/col back to approximate byte offset.
+		// We use the finding's line to mark coverage at line granularity.
+		covered[rangeKey{f.Line, f.EndLine}] = true
+	}
+
+	var findings []Finding
+	for _, m := range entropyMatches {
+		line, col := byteOffsetToLineCol(art.Content, m.Index)
+		endLine, endCol := byteOffsetToLineCol(art.Content, m.End)
+
+		// Skip if this region is already covered by a regex finding.
+		if covered[rangeKey{line, endLine}] {
+			continue
+		}
+
+		findings = append(findings, Finding{
+			Artifact:       art.Path,
+			ArtifactClass:  art.Class,
+			RuleID:         "entropy_high_string",
+			Category:       "entropy",
+			Severity:       m.Severity,
+			Confidence:     m.Confidence,
+			Message:        "High-entropy string detected (potential unknown secret)",
+			Line:           line,
+			Column:         col,
+			EndLine:        endLine,
+			EndColumn:      endCol,
+			MatchedText:    truncate(m.Value, 200),
+			DetectionLayer: "entropy",
+			Remediation:    "Review this high-entropy string. If it is a secret, remove it and rotate it. If it is benign, add an inline suppression: // aegisgate-ignore: entropy_high_string",
+		})
+	}
+
+	return findings
 }

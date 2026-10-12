@@ -46,6 +46,26 @@ if [ -z "$FILES" ]; then
     exit 0
 fi
 
+# Whitelist: files in internal/detectors/ contain known example/test values
+# for detection testing. These are intentionally included.
+WHITELIST="internal/detectors/examples.go internal/detectors/examples_test.go internal/detectors/entropy.go internal/detectors/entropy_test.go"
+
+# Filter out whitelisted files
+FILTERED=""
+for f in $FILES; do
+    skip=false
+    for w in $WHITELIST; do
+        if [ "$f" = "$w" ]; then
+            skip=true
+            break
+        fi
+    done
+    if [ "$skip" = "false" ]; then
+        FILTERED="$FILTERED $f"
+    fi
+done
+FILES="$FILTERED"
+
 echo "=== AegisGate Scanner OPSEC scan ($LABEL files) ==="
 echo
 

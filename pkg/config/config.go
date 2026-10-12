@@ -241,7 +241,11 @@ func (c *Config) Validate() error {
 	switch strings.ToLower(c.OutputFormat) {
 	case "sarif", "json", "jsonl", "text", "html", "pr-comment", "github-actions", "sbom", "":
 	default:
-		return fmt.Errorf("invalid output_format: %s (must be sarif, json, jsonl, text, html, pr-comment, github-actions, or sbom)", c.OutputFormat)
+		display := c.OutputFormat
+		if len(display) > 100 {
+			display = display[:100] + "..."
+		}
+		return fmt.Errorf("invalid output_format: %s (must be sarif, json, jsonl, text, html, pr-comment, github-actions, or sbom)", display)
 	}
 
 	// Validate ML threshold.
