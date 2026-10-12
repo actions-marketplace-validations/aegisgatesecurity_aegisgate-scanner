@@ -34,6 +34,16 @@ import (
 // Types
 // ---------------------------------------------------------------------
 
+// MaxExtractionSize is the maximum total bytes that can be extracted
+// from a single archive. This prevents decompression bombs (zip bombs)
+// from consuming disk space or memory. Default: 100MB.
+const MaxExtractionSize int64 = 100 * 1024 * 1024
+
+// MaxExtractedFiles is the maximum number of files that can be extracted
+// from a single archive. This prevents file-count bombs (thousands of
+// tiny files) from slowing down the scanner. Default: 10,000.
+const MaxExtractedFiles = 10000
+
 // ArchiveType represents the type of archive file.
 type ArchiveType string
 
@@ -154,8 +164,14 @@ func extractZip(zipPath, destDir string) ([]string, error) {
 	defer r.Close()
 
 	var files []string
+	var totalSize int64
 
 	for _, f := range r.File {
+		// Check file count limit.
+		if len(files) >= MaxExtractedFiles {
+			return nil, fmt.Errorf("archive bomb: exceeded max file count %d", MaxExtractedFiles)
+		}
+
 		// Prevent Zip Slip (path traversal).
 		destPath, err := sanitizeExtractPath(destDir, f.Name)
 		if err != nil {
@@ -169,6 +185,15 @@ func extractZip(zipPath, destDir string) ([]string, error) {
 			continue
 		}
 
+		// Check uncompressed size limit.
+		if int64(f.UncompressedSize64) > MaxExtractionSize {
+			return nil, fmt.Errorf("archive bomb: file %s uncompressed size %d exceeds max %d",
+				f.Name, f.UncompressedSize64, MaxExtractionSize)
+		}
+		if totalSize+int64(f.UncompressedSize64) > MaxExtractionSize {
+			return nil, fmt.Errorf("archive bomb: total extracted size would exceed max %d", MaxExtractionSize)
+		}
+
 		// Ensure parent directory exists.
 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 			return nil, fmt.Errorf("create parent dir: %w", err)
@@ -180,18 +205,22 @@ func extractZip(zipPath, destDir string) ([]string, error) {
 			return nil, fmt.Errorf("open zip entry %s: %w", f.Name, err)
 		}
 
-		// Write file.
+		// Write file with size limit enforcement.
 		outFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 		if err != nil {
 			rc.Close()
 			return nil, fmt.Errorf("create file %s: %w", destPath, err)
 		}
 
-		if _, err := io.Copy(outFile, rc); err != nil {
+		// Use LimitReader to enforce max extraction size at copy time.
+		limited := io.LimitReader(rc, MaxExtractionSize)
+		n, err := io.Copy(outFile, limited)
+		if err != nil {
 			rc.Close()
 			outFile.Close()
 			return nil, fmt.Errorf("write file %s: %w", destPath, err)
 		}
+		totalSize += n
 
 		rc.Close()
 		outFile.Close()
@@ -250,8 +279,14 @@ func extractTar(r io.Reader, destDir string) ([]string, error) {
 	tr := tar.NewReader(r)
 
 	var files []string
+	var totalSize int64
 
 	for {
+		// Check file count limit.
+		if len(files) >= MaxExtractedFiles {
+			return nil, fmt.Errorf("archive bomb: exceeded max file count %d", MaxExtractedFiles)
+		}
+
 		header, err := tr.Next()
 		if err == io.EOF {
 			break
@@ -272,6 +307,15 @@ func extractTar(r io.Reader, destDir string) ([]string, error) {
 				return nil, fmt.Errorf("create dir %s: %w", destPath, err)
 			}
 		case tar.TypeReg:
+			// Check file size limit.
+			if header.Size > MaxExtractionSize {
+				return nil, fmt.Errorf("archive bomb: file %s size %d exceeds max %d",
+					header.Name, header.Size, MaxExtractionSize)
+			}
+			if totalSize+header.Size > MaxExtractionSize {
+				return nil, fmt.Errorf("archive bomb: total extracted size would exceed max %d", MaxExtractionSize)
+			}
+
 			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 				return nil, fmt.Errorf("create parent dir: %w", err)
 			}
@@ -281,10 +325,14 @@ func extractTar(r io.Reader, destDir string) ([]string, error) {
 				return nil, fmt.Errorf("create file %s: %w", destPath, err)
 			}
 
-			if _, err := io.Copy(outFile, tr); err != nil {
+			// Use LimitReader to enforce max extraction size at copy time.
+			limited := io.LimitReader(tr, MaxExtractionSize)
+			n, err := io.Copy(outFile, limited)
+			if err != nil {
 				outFile.Close()
 				return nil, fmt.Errorf("write file %s: %w", destPath, err)
 			}
+			totalSize += n
 			outFile.Close()
 
 			relPath, _ := filepath.Rel(destDir, destPath)
