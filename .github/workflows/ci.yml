@@ -220,7 +220,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           VERSION=$(cat VERSION)
-          go build -ldflags="-s -w -X github.com/aegisgatesecurity/aegisgate-scanner/cmd/aegisgate-scanner.Version=${VERSION}" \
+          go build -ldflags="-s -w -X main.Version=${VERSION}" \
             -o aegisgate-scanner ./cmd/aegisgate-scanner/
           ls -lh aegisgate-scanner
       - name: Build binary (CGO)
@@ -233,7 +233,7 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/lib/amd64
         run: |
           VERSION=$(cat VERSION)
-          go build -ldflags="-s -w -X github.com/aegisgatesecurity/aegisgate-scanner/cmd/aegisgate-scanner.Version=${VERSION}" \
+          go build -ldflags="-s -w -X main.Version=${VERSION}" \
             -o aegisgate-scanner ./cmd/aegisgate-scanner/
           ls -lh aegisgate-scanner
       - name: Verify binary runs

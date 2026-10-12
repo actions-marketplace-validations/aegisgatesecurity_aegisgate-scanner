@@ -70,7 +70,7 @@ ENV LD_LIBRARY_PATH=/build/lib/${TARGETARCH}
 
 # Build the scanner binary.
 RUN go build \
-    -ldflags="-s -w -X github.com/aegisgatesecurity/aegisgate-scanner/cmd/aegisgate-scanner.Version=${VERSION}" \
+    -ldflags="-s -w -X main.Version=${VERSION}" \
     -o /aegisgate-scanner ./cmd/aegisgate-scanner/
 
 # ===========================================================================
@@ -120,13 +120,31 @@ USER scanner
 
 ENTRYPOINT ["/app/aegisgate-scanner"]
 
+# ---------------------------------------------------------------------------
+# Builder stage (lite): CGO_ENABLED=0 for pure static binary.
+# ---------------------------------------------------------------------------
+FROM golang:1.26.9-bookworm AS builder-lite
+
+WORKDIR /build
+
+COPY go.mod ./
+COPY . .
+
+ARG VERSION=0.1.0
+
+ENV CGO_ENABLED=0
+
+RUN go build \
+    -ldflags="-s -w -X main.Version=${VERSION}" \
+    -o /aegisgate-scanner ./cmd/aegisgate-scanner/
+
 # ===========================================================================
 # Target: lite — Heuristic-only scanner (CGO_ENABLED=0, distroless)
 # ===========================================================================
 FROM gcr.io/distroless/static-debian12:nonroot AS lite
 
-# Copy the static binary only — no ONNX Runtime, no model, no libs.
-COPY --from=builder /aegisgate-scanner /app/aegisgate-scanner
+# Copy the static binary from the lite builder (CGO=0).
+COPY --from=builder-lite /aegisgate-scanner /app/aegisgate-scanner
 
 # WORKDIR for GitHub Action usage — host repo is mounted here.
 WORKDIR /github/workspace

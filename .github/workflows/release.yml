@@ -65,7 +65,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           VERSION=${{ github.event.inputs.version || github.ref_name }}
-          go build -ldflags "-s -w -X github.com/aegisgatesecurity/aegisgate-scanner/cmd/aegisgate-scanner.Version=${VERSION}" \
+          go build -ldflags "-s -w -X main.Version=${VERSION}" \
             -o aegisgate-scanner-${{ matrix.suffix }} ./cmd/aegisgate-scanner/
       - name: Generate SHA256 checksum
         run: |
@@ -115,7 +115,7 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/lib/${{ matrix.goarch }}
         run: |
           VERSION=${{ github.event.inputs.version || github.ref_name }}
-          go build -ldflags "-s -w -X github.com/aegisgatesecurity/aegisgate-scanner/cmd/aegisgate-scanner.Version=${VERSION}" \
+          go build -ldflags "-s -w -X main.Version=${VERSION}" \
             -o aegisgate-scanner-${{ matrix.suffix }} ./cmd/aegisgate-scanner/
       - name: Generate SHA256 checksum
         run: |

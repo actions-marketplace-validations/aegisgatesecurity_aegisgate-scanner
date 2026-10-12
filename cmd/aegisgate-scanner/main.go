@@ -767,12 +767,7 @@ func findDefaultModelPath() string {
 	return ""
 }
 
-// isCGOEnabled reports whether the binary was built with CGO.
-func isCGOEnabled() bool {
-	// At runtime, we check if the ONNX model can be loaded.
-	// If CGO was disabled, the ML detector runs in heuristic-only mode.
-	return true // placeholder — actual check is at scan time
-}
+// isCGOEnabled is implemented via build tags in cgo_cgo.go and cgo_nocgo.go.
 
 // ---------------------------------------------------------------------
 // Usage
