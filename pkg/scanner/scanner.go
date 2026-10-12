@@ -515,7 +515,15 @@ func byteOffsetToLineCol(content string, offset int) (line, col int) {
 }
 
 // truncate shortens a string to maxLen characters, appending "..." if truncated.
+// Returns the original string if maxLen is negative (treated as no limit).
+// Returns empty string if maxLen is 0.
 func truncate(s string, maxLen int) string {
+	if maxLen < 0 {
+		return s
+	}
+	if maxLen == 0 {
+		return ""
+	}
 	if len(s) <= maxLen {
 		return s
 	}
