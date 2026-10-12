@@ -226,8 +226,8 @@ func TestGetRuleMetadata_Compliance(t *testing.T) {
 			t.Errorf("expected metadata for %s, got empty", r)
 			continue
 		}
-		if len(m.CWE) == 0 || m.CWE[0] != 1004 {
-			t.Errorf("expected CWE 1004 for %s, got %v", r, m.CWE)
+		if len(m.CWE) == 0 || m.CWE[0] != 200 {
+			t.Errorf("expected CWE 200 for %s, got %v", r, m.CWE)
 		}
 		if m.Remediation == "" {
 			t.Errorf("expected non-empty remediation for %s", r)
@@ -280,13 +280,20 @@ func TestGetRuleMetadata_MitreATLAS(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestGetRuleMetadata_Default(t *testing.T) {
-	// Unknown rule should return empty from GetRuleMetadata.
+	// Unknown rule should return a valid RuleMetadata with the rule ID
+	// populated (category-based fallback returns a sensible default).
 	m := GetRuleMetadata("totally_unknown_rule_xyz")
-	if m.RuleID != "" {
-		t.Errorf("expected empty RuleID for unknown rule, got '%s'", m.RuleID)
+	if m.RuleID != "totally_unknown_rule_xyz" {
+		t.Errorf("expected RuleID 'totally_unknown_rule_xyz', got '%s'", m.RuleID)
+	}
+	if m.Description == "" {
+		t.Error("expected non-empty description for unknown rule fallback")
+	}
+	if m.Remediation == "" {
+		t.Error("expected non-empty remediation for unknown rule fallback")
 	}
 
-	// GetRuleMetadataWithDefault should return sensible default.
+	// GetRuleMetadataWithDefault should return the same result.
 	md := GetRuleMetadataWithDefault("totally_unknown_rule_xyz")
 	if md.RuleID != "totally_unknown_rule_xyz" {
 		t.Errorf("expected RuleID 'totally_unknown_rule_xyz', got '%s'", md.RuleID)
@@ -403,12 +410,50 @@ func TestRuleMetadata_MapIsCopy(t *testing.T) {
 }
 
 func TestGetRuleMetadata_DangerousCode(t *testing.T) {
+	// General dangerous_ patterns → CWE 78 (OS Command Injection)
 	m := GetRuleMetadata("dangerous_js_eval")
 	if m.RuleID == "" {
 		t.Fatal("expected metadata for dangerous_js_eval, got empty")
 	}
-	if len(m.CWE) == 0 || m.CWE[0] != 94 {
-		t.Errorf("expected CWE 94 for dangerous code, got %v", m.CWE)
+	if len(m.CWE) == 0 || m.CWE[0] != 78 {
+		t.Errorf("expected CWE 78 for dangerous code (general), got %v", m.CWE)
+	}
+}
+
+func TestGetRuleMetadata_DangerousSSRF(t *testing.T) {
+	// dangerous_*endpoint* → CWE 918 (SSRF)
+	rules := []string{
+		"dangerous_aws_endpoint",
+		"dangerous_gcp_endpoint",
+	}
+	for _, r := range rules {
+		m := GetRuleMetadata(r)
+		if m.RuleID == "" {
+			t.Errorf("expected metadata for %s, got empty", r)
+			continue
+		}
+		if len(m.CWE) == 0 || m.CWE[0] != 918 {
+			t.Errorf("expected CWE 918 (SSRF) for %s, got %v", r, m.CWE)
+		}
+	}
+}
+
+func TestGetRuleMetadata_DangerousBase64(t *testing.T) {
+	// dangerous_*b64* / dangerous_base64* → CWE 94 (Code Injection)
+	rules := []string{
+		"dangerous_b64_env_var",
+		"dangerous_b64_eval_chain",
+		"dangerous_base64_blob",
+	}
+	for _, r := range rules {
+		m := GetRuleMetadata(r)
+		if m.RuleID == "" {
+			t.Errorf("expected metadata for %s, got empty", r)
+			continue
+		}
+		if len(m.CWE) == 0 || m.CWE[0] != 94 {
+			t.Errorf("expected CWE 94 (Code Injection) for %s, got %v", r, m.CWE)
+		}
 	}
 }
 

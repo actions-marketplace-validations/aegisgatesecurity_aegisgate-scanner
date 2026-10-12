@@ -430,16 +430,17 @@ var prefixMatchers = []prefixMatcher{
 		},
 	},
 
-	// Secrets — CWE 798 (Use of Hard-coded Credentials)
+	// Secrets — CWE 798 (Use of Hard-coded Credentials), OWASP LLM06
 	{
 		prefixes: []string{"secret_"},
 		template: RuleMetadata{
 			CWE:         []int{798},
-			OWASPLLMTop: "",
-			OWASPName:   "",
+			OWASPLLMTop: "LLM06",
+			OWASPName:   "Sensitive Info Disclosure",
 			Description: "Hardcoded secret or credential detected in source code or configuration.",
 			Remediation: remediationSecrets,
 			References: []string{
+				"https://owasp.org/www-project-top-10-for-large-language-model-applications/",
 				"https://cwe.mitre.org/data/definitions/798.html",
 			},
 		},
@@ -490,20 +491,20 @@ var prefixMatchers = []prefixMatcher{
 		},
 	},
 
-	// Compliance — CWE 1004 (Sensitive Information in Source Code Comments)
+	// Compliance — CWE 200 (Information Exposure)
 	{
 		prefixes: []string{
 			"eu_ai_act_", "nist_", "iso_", "ccpa_", "lgpd_",
 			"anp_", "cu_", "pipeda_", "popia_", "compliance_",
 		},
 		template: RuleMetadata{
-			CWE:         []int{1004},
+			CWE:         []int{200},
 			OWASPLLMTop: "",
 			OWASPName:   "",
 			Description: "Regulatory compliance reference detected — review against applicable regulations.",
 			Remediation: remediationCompliance,
 			References: []string{
-				"https://cwe.mitre.org/data/definitions/1004.html",
+				"https://cwe.mitre.org/data/definitions/200.html",
 			},
 		},
 	},
@@ -539,17 +540,51 @@ var prefixMatchers = []prefixMatcher{
 		},
 	},
 
-	// Dangerous code patterns — CWE 94 (Code Injection)
+	// Dangerous URL/endpoint patterns — CWE 918 (SSRF)
+	// Checked before the general dangerous_ matcher below.
 	{
-		prefixes: []string{"dangerous_"},
+		prefixes: []string{"dangerous_aws_endpoint", "dangerous_gcp_endpoint"},
+		template: RuleMetadata{
+			CWE:         []int{918},
+			OWASPLLMTop: "",
+			OWASPName:   "",
+			Description: "Dangerous endpoint or URL pattern detected — potential Server-Side Request Forgery (SSRF) risk.",
+			Remediation: remediationDangerousCode,
+			References: []string{
+				"https://cwe.mitre.org/data/definitions/918.html",
+			},
+		},
+	},
+
+	// Dangerous base64/code patterns — CWE 94 (Code Injection)
+	// Checked before the general dangerous_ matcher below.
+	{
+		prefixes: []string{
+			"dangerous_b64_", "dangerous_base64",
+		},
 		template: RuleMetadata{
 			CWE:         []int{94},
 			OWASPLLMTop: "",
 			OWASPName:   "",
-			Description: "Dangerous code pattern detected — unsafe API usage that may lead to code injection or execution.",
+			Description: "Dangerous base64-encoded code pattern detected — potential code injection via obfuscated payloads.",
 			Remediation: remediationDangerousCode,
 			References: []string{
 				"https://cwe.mitre.org/data/definitions/94.html",
+			},
+		},
+	},
+
+	// Dangerous code patterns (general) — CWE 78 (OS Command Injection)
+	{
+		prefixes: []string{"dangerous_"},
+		template: RuleMetadata{
+			CWE:         []int{78},
+			OWASPLLMTop: "",
+			OWASPName:   "",
+			Description: "Dangerous code pattern detected — unsafe API usage that may lead to OS command injection or arbitrary code execution.",
+			Remediation: remediationDangerousCode,
+			References: []string{
+				"https://cwe.mitre.org/data/definitions/78.html",
 			},
 		},
 	},
@@ -618,24 +653,25 @@ func GetRuleMetadata(ruleID string) RuleMetadata {
 		return result
 	}
 
-	return RuleMetadata{}
+	// Default: return a valid RuleMetadata struct with the rule ID so
+	// SARIF and other output formatters always have a populated entry.
+	return RuleMetadata{
+		RuleID:      ruleID,
+		Description: "Security finding detected by AegisGate Scanner.",
+		Remediation: remediationDefault,
+		References: []string{
+			"https://aegisgatesecurity.io/docs/scanner/rules/" + ruleID,
+		},
+	}
 }
 
 // GetRuleMetadataWithDefault looks up metadata for a rule ID, returning
 // a sensible default for unknown rules that do not match any category.
+// Since GetRuleMetadata now always returns a populated struct, this
+// function is equivalent to GetRuleMetadata but is kept for backward
+// compatibility with existing callers.
 func GetRuleMetadataWithDefault(ruleID string) RuleMetadata {
-	m := GetRuleMetadata(ruleID)
-	if m.RuleID == "" {
-		return RuleMetadata{
-			RuleID:      ruleID,
-			Description: "Security finding detected by AegisGate Scanner.",
-			Remediation: remediationDefault,
-			References: []string{
-				"https://aegisgatesecurity.io/docs/scanner/rules/" + ruleID,
-			},
-		}
-	}
-	return m
+	return GetRuleMetadata(ruleID)
 }
 
 // AllRuleMetadata returns a copy of the full explicit metadata map.
