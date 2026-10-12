@@ -52,7 +52,10 @@ import (
 )
 
 // Version is set at build time via ldflags.
-var Version = "0.1.0-dev"
+// The Makefile passes -ldflags="-X main.Version=$(VERSION)" using the
+// VERSION file. When running via `go run` without ldflags, this default
+// is used. Keep it in sync with the VERSION file.
+var Version = "0.3.0"
 
 // Exit codes.
 const (
@@ -405,6 +408,13 @@ func runScan(args []string, globalLogLevel, globalLogFormat string) int {
 		if err != nil {
 			slog.Warn("cache load failed, continuing without cache", "error", err)
 		} else {
+			// Apply eviction policy from config.
+			sc2.MaxEntries = cfg.CacheMaxEntries
+			if cfg.CacheMaxAge > 0 {
+				sc2.MaxAge = time.Duration(cfg.CacheMaxAge) * time.Hour
+			}
+			// Evict any expired/excess entries from loaded cache.
+			sc2.EvictNow()
 			scanOpts.Cache = sc2
 			slog.Info("cache enabled", "path", cachePath, "entries", sc2.EntryCount())
 		}

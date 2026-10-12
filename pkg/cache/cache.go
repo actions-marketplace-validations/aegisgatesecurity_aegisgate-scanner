@@ -89,14 +89,22 @@ type CacheFile struct {
 
 // Cache provides content-addressed storage of scan results.
 // It is safe for concurrent use by multiple goroutines.
+//
+// Eviction policy: when the number of entries exceeds MaxEntries,
+// the oldest entries (by CachedAt timestamp) are evicted. When
+// MaxAge is non-zero, entries older than MaxAge are evicted on Load
+// and on Put. A MaxEntries of 0 means unlimited. A MaxAge of 0
+// means no age-based eviction.
 type Cache struct {
-	mu      sync.RWMutex
-	path    string
-	header  CacheHeader
-	entries map[string]CacheEntry
-	hits    atomic.Int64
-	misses  atomic.Int64
-	dirty   bool
+	mu         sync.RWMutex
+	path       string
+	header     CacheHeader
+	entries    map[string]CacheEntry
+	hits       atomic.Int64
+	misses     atomic.Int64
+	dirty      bool
+	MaxEntries int           // 0 = unlimited
+	MaxAge     time.Duration // 0 = no age-based eviction
 }
 
 // ---------------------------------------------------------------------
@@ -169,6 +177,17 @@ func Load(path string, expectedHeader CacheHeader) (*Cache, error) {
 	if c.entries == nil {
 		c.entries = make(map[string]CacheEntry)
 	}
+
+	// Apply age-based eviction on load.
+	if c.MaxAge > 0 {
+		c.evictExpired()
+	}
+
+	// Apply size-based eviction on load.
+	if c.MaxEntries > 0 && len(c.entries) > c.MaxEntries {
+		c.evictOldest(len(c.entries) - c.MaxEntries)
+	}
+
 	return c, nil
 }
 
@@ -245,6 +264,74 @@ func (c *Cache) Put(contentHash string, findings []CacheFinding, size int64) {
 		CachedAt: time.Now().UTC(),
 	}
 	c.dirty = true
+
+	// Evict if over capacity.
+	if c.MaxEntries > 0 && len(c.entries) > c.MaxEntries {
+		c.evictOldest(len(c.entries) - c.MaxEntries)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Eviction
+// ---------------------------------------------------------------------
+
+// evictOldest removes the n entries with the oldest CachedAt timestamps.
+// Must be called with c.mu held (write lock).
+func (c *Cache) evictOldest(n int) {
+	if n <= 0 || len(c.entries) == 0 {
+		return
+	}
+
+	// Build a slice of (hash, timestamp) pairs for sorting.
+	type entryAge struct {
+		hash string
+		ts   time.Time
+	}
+	ages := make([]entryAge, 0, len(c.entries))
+	for hash, entry := range c.entries {
+		ages = append(ages, entryAge{hash: hash, ts: entry.CachedAt})
+	}
+
+	// Sort by timestamp ascending (oldest first).
+	sort.Slice(ages, func(i, j int) bool {
+		return ages[i].ts.Before(ages[j].ts)
+	})
+
+	// Remove the n oldest.
+	toRemove := n
+	if toRemove > len(ages) {
+		toRemove = len(ages)
+	}
+	for i := 0; i < toRemove; i++ {
+		delete(c.entries, ages[i].hash)
+	}
+	c.dirty = true
+}
+
+// evictExpired removes entries older than MaxAge.
+// Must be called with c.mu held (write lock).
+func (c *Cache) evictExpired() {
+	if c.MaxAge <= 0 {
+		return
+	}
+	cutoff := time.Now().UTC().Add(-c.MaxAge)
+	for hash, entry := range c.entries {
+		if entry.CachedAt.Before(cutoff) {
+			delete(c.entries, hash)
+			c.dirty = true
+		}
+	}
+}
+
+// EvictNow forces immediate eviction of expired and excess entries.
+// This is useful for testing or for manual cache maintenance.
+func (c *Cache) EvictNow() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.evictExpired()
+	if c.MaxEntries > 0 && len(c.entries) > c.MaxEntries {
+		c.evictOldest(len(c.entries) - c.MaxEntries)
+	}
 }
 
 // ---------------------------------------------------------------------

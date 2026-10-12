@@ -73,6 +73,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skip under `-short`. 50MB/100MB tests require `AEGISGATE_LONG_TESTS=1`.
 - **ReDoS test timeout scaling** — 5s normal, 30s under `-short`.
 
+### Added — v0.3.0: Content-Hash Caching
+
+- **Content-hash scan caching** — skip re-scanning unchanged files across
+  runs. Results cached by SHA-256(content), path-independent. Changing
+  severity, disabled rules, or baselines does NOT invalidate cache.
+  CLI: `--cache`, `--cache-dir`, `--clear-cache`. Config: `cache_enabled`,
+  `cache_dir`. New `pkg/cache/` package (264 LOC + 331 LOC tests).
+- **Cache eviction** — LRU by insertion time (`cache_max_entries`) and
+  age-based (`cache_max_age` in hours). Both default to 0 (unlimited).
+  `EvictNow()` for manual eviction. Applied on load and on put.
+
+### Fixed — v0.3.0
+
+- **Version string** — `var Version` in main.go updated from `0.1.0-dev`
+  to `0.3.0` (was only correct via ldflags in Makefile builds).
+
+### Documented — v0.3.0
+
+- **Dataflow/taint tracking limitation** — documented in README under
+  "Known Limitations". Scanner performs static pattern matching, not
+  AST-level dataflow analysis. Recommends Semgrep/CodeQL as complementary
+  tools for code-level taint tracking.
+
 ### Added — Solo Maintainer ROI Features (v0.2.0-dev)
 - **JSONL output format** (`--format jsonl`) — NDJSON with one finding per line
   plus a summary line. Ideal for piping to jq, Splunk, ELK, Datadog.

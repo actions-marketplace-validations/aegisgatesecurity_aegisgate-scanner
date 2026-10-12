@@ -3,6 +3,7 @@
 package cache
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -327,5 +328,140 @@ func TestCacheEntryTimestamp(t *testing.T) {
 
 	if entry.CachedAt.Before(before) || entry.CachedAt.After(after) {
 		t.Errorf("CachedAt = %v, expected between %v and %v", entry.CachedAt, before, after)
+	}
+}
+
+func TestCacheEvict_MaxEntries(t *testing.T) {
+	c := &Cache{
+		entries:    make(map[string]CacheEntry),
+		header:     CacheHeader{Version: CacheVersion, ScannerVersion: "test"},
+		MaxEntries: 3,
+	}
+
+	// Insert 5 entries with staggered timestamps.
+	for i := 0; i < 5; i++ {
+		hash := ContentHash(string(rune('a' + i)))
+		c.mu.Lock()
+		c.entries[hash] = CacheEntry{
+			Findings: []CacheFinding{{RuleID: "test"}},
+			CachedAt: time.Now().UTC().Add(time.Duration(i) * time.Minute),
+		}
+		c.dirty = true
+		c.mu.Unlock()
+	}
+
+	// Put one more — should trigger eviction.
+	c.Put(ContentHash("trigger"), []CacheFinding{{RuleID: "test"}}, 100)
+
+	c.mu.RLock()
+	count := len(c.entries)
+	c.mu.RUnlock()
+
+	if count > 3 {
+		t.Errorf("after eviction, entry count = %d, want <= %d", count, c.MaxEntries)
+	}
+
+	// The oldest entries (a, b) should have been evicted.
+	c.mu.RLock()
+	_, hasA := c.entries[ContentHash("a")]
+	_, hasB := c.entries[ContentHash("b")]
+	c.mu.RUnlock()
+
+	if hasA {
+		t.Error("oldest entry 'a' was not evicted")
+	}
+	if hasB {
+		t.Error("second-oldest entry 'b' was not evicted")
+	}
+}
+
+func TestCacheEvict_MaxAge(t *testing.T) {
+	c := &Cache{
+		entries: make(map[string]CacheEntry),
+		header:  CacheHeader{Version: CacheVersion, ScannerVersion: "test"},
+		MaxAge:  1 * time.Hour,
+	}
+
+	// Insert an old entry (2 hours ago) and a new entry (1 min ago).
+	oldHash := ContentHash("old")
+	newHash := ContentHash("new")
+
+	c.mu.Lock()
+	c.entries[oldHash] = CacheEntry{
+		Findings: []CacheFinding{{RuleID: "old"}},
+		CachedAt: time.Now().UTC().Add(-2 * time.Hour),
+	}
+	c.entries[newHash] = CacheEntry{
+		Findings: []CacheFinding{{RuleID: "new"}},
+		CachedAt: time.Now().UTC().Add(-1 * time.Minute),
+	}
+	c.dirty = true
+	c.mu.Unlock()
+
+	// Run eviction.
+	c.EvictNow()
+
+	c.mu.RLock()
+	_, hasOld := c.entries[oldHash]
+	_, hasNew := c.entries[newHash]
+	count := len(c.entries)
+	c.mu.RUnlock()
+
+	if hasOld {
+		t.Error("expired entry was not evicted")
+	}
+	if !hasNew {
+		t.Error("fresh entry was incorrectly evicted")
+	}
+	if count != 1 {
+		t.Errorf("entry count = %d, want 1", count)
+	}
+}
+
+func TestCacheEvict_LoadWithMaxAge(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+
+	header := CacheHeader{Version: CacheVersion, ScannerVersion: "test"}
+
+	// Create cache with entries.
+	c1, _ := Load(path, header)
+	c1.Put("old_hash", []CacheFinding{{RuleID: "old"}}, 100)
+	c1.Put("new_hash", []CacheFinding{{RuleID: "new"}}, 100)
+	// Manually backdate one entry.
+	c1.mu.Lock()
+	entry := c1.entries["old_hash"]
+	entry.CachedAt = time.Now().UTC().Add(-48 * time.Hour)
+	c1.entries["old_hash"] = entry
+	c1.mu.Unlock()
+	c1.Save()
+
+	// Load with MaxAge = 24 hours.
+	c2, err := Load(path, header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2.MaxAge = 24 * time.Hour
+	c2.EvictNow()
+
+	if c2.EntryCount() != 1 {
+		t.Errorf("after age eviction on load, entry count = %d, want 1", c2.EntryCount())
+	}
+}
+
+func TestCacheEvict_NoEvictionWhenUnlimited(t *testing.T) {
+	c := &Cache{
+		entries:    make(map[string]CacheEntry),
+		header:     CacheHeader{Version: CacheVersion, ScannerVersion: "test"},
+		MaxEntries: 0, // unlimited
+		MaxAge:     0, // no age limit
+	}
+
+	for i := 0; i < 100; i++ {
+		c.Put(ContentHash(fmt.Sprintf("entry-%d", i)), []CacheFinding{{RuleID: "test"}}, 100)
+	}
+
+	if c.EntryCount() != 100 {
+		t.Errorf("unlimited cache has %d entries, want 100", c.EntryCount())
 	}
 }

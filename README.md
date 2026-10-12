@@ -275,6 +275,26 @@ Suppress known/accepted findings using `--diff --baseline` to show only
 new findings since the last scan. Useful for CI/CD gating without
 blocking on pre-existing issues.
 
+### Content-Hash Caching
+Skip re-scanning unchanged files across runs. Results are cached by
+SHA-256(content), so renamed files still hit the cache. Changing severity
+thresholds, disabled rules, or baselines does **not** invalidate the
+cache — only content changes, pattern changes, or scanner version bumps do.
+
+```bash
+aegisgate-scanner scan --cache .
+aegisgate-scanner scan --cache --cache-dir /tmp/aegisgate-cache.json .
+aegisgate-scanner scan --clear-cache .
+```
+
+Cache stats are reported in scan output (`cache hits: N, cache misses: N`).
+Configure in `.aegisgate.yml`:
+
+```yaml
+cache_enabled: true
+cache_dir: .aegisgate-cache.json
+```
+
 ### URL & Base64 Detection
 Scanner detects URLs and base64-encoded content, decoding base64 to
 scan the underlying text for hidden threats.
@@ -384,6 +404,16 @@ aegisgate-scanner/
 
 ## Roadmap
 
+### Completed in v0.3.0
+- [x] Entropy-based secret detection (Shannon entropy for unknown secrets)
+- [x] Known example value suppression (AWS docs keys, GitHub test tokens, etc.)
+- [x] Language-aware scanning (17 languages, pattern filtering by file type)
+- [x] Regex merging (alternation compilation, 10x fewer regex calls)
+- [x] Git history scanning (`scan-history` command with commit-by-commit diff)
+- [x] Line-by-line keyword pre-filtering (12x faster large-file scanning)
+- [x] O(log n) line/column lookup (binary search on precomputed newline table)
+- [x] Content-hash scan caching (skip unchanged files across runs)
+
 ### Completed in v0.2.0-dev
 - [x] Structured logging via `slog` with `--log-level` and `--log-format` flags
 - [x] JSONL (NDJSON) output format for SIEM/log aggregation
@@ -392,15 +422,43 @@ aegisgate-scanner/
 - [x] Makefile, install.sh, Homebrew formula
 
 ### Planned
-- [ ] Performance: alternation regex compilation (276→1 pass)
-- [ ] Real-world corpus validation (100+ known-poisoned artifacts)
-- [ ] Content-hash scan caching (skip unchanged files across runs)
+- [ ] Cache eviction (LRU with max entries / max age)
 - [ ] Streaming scan mode for large files (chunk-based processing)
+- [ ] Real-world corpus validation (100+ known-poisoned artifacts)
 - [ ] Competitive benchmark report (vs TruffleHog, Gitleaks, Semgrep)
 - [ ] Transformer-based ML model upgrade (DistilBERT/BERT)
 - [ ] Multimodal artifact support (image-based prompt injection)
 - [ ] Model weight analysis (backdoor detection)
 - [ ] Additional archive formats (.7z, .rar)
+
+## Known Limitations
+
+### No Dataflow / Taint Tracking
+
+AegisGate Scanner performs **static pattern matching** — it detects
+security-relevant patterns in file content (secrets, PII, prompt
+injection, dangerous functions, compliance violations) but does **not**
+perform dataflow or taint analysis. This means:
+
+- It does **not** track how user input flows through code to sinks
+  (e.g., `request → variable → eval()`)
+- It does **not** build ASTs or control flow graphs
+- It does **not** detect cross-file taint propagation
+
+This is a deliberate scope decision. Dataflow analysis requires a
+fundamentally different architecture (language-specific AST parsers,
+control flow graph construction, interprocedural analysis) that is
+orthogonal to the scanner's core mission of scanning **AI artifacts**
+(RAG documents, training datasets, model configs, agent skills) for
+embedded threats.
+
+**For code-level dataflow analysis**, we recommend complementary tools:
+- [Semgrep](https://semgrep.dev/) — rule-based dataflow with taint tracking
+- [CodeQL](https://codeql.github.com/) — semantic code analysis
+- [Snyk Code](https://snyk.io/products/snyk-code/) — AI-powered code analysis
+
+AegisGate Scanner and these tools are **complementary**, not
+competitive — they solve different problems for different artifact types.
 
 ## Changelog
 

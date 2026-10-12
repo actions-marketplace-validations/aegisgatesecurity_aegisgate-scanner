@@ -94,6 +94,16 @@ type Config struct {
 	// .aegisgate-cache.json in the scan root directory.
 	CacheDir string `yaml:"cache_dir"`
 
+	// CacheMaxEntries is the maximum number of entries in the cache.
+	// 0 = unlimited. When exceeded, oldest entries are evicted (LRU by
+	// insertion time). Default: 0 (unlimited).
+	CacheMaxEntries int `yaml:"cache_max_entries"`
+
+	// CacheMaxAge is the maximum age of cache entries in hours.
+	// 0 = no age-based eviction. Entries older than this are evicted
+	// on load and on put. Default: 0 (no age limit).
+	CacheMaxAge int `yaml:"cache_max_age"`
+
 	// CustomRules are user-defined detection patterns.
 	// Each rule has a name, regex pattern, severity, category, and description.
 	CustomRules []CustomRuleConfig `yaml:"custom_rules"`
@@ -152,6 +162,8 @@ func Default() *Config {
 		BaselinePath:       "",
 		CacheEnabled:       false,
 		CacheDir:           "",
+		CacheMaxEntries:    0, // unlimited
+		CacheMaxAge:        0, // no age limit
 		RespectGitIgnore:   true,
 		FailOnSeverity:     "low",
 		DisableRules:       []string{},
@@ -539,6 +551,18 @@ func parseYAML(data []byte, cfg *Config) error {
 			cfg.CacheEnabled = parseBool(value)
 		case "cache_dir":
 			cfg.CacheDir = value
+		case "cache_max_entries":
+			n, err := parseInt(value)
+			if err != nil {
+				return fmt.Errorf("invalid cache_max_entries value: %s", value)
+			}
+			cfg.CacheMaxEntries = n
+		case "cache_max_age":
+			n, err := parseInt(value)
+			if err != nil {
+				return fmt.Errorf("invalid cache_max_age value: %s", value)
+			}
+			cfg.CacheMaxAge = n
 		case "respect_gitignore":
 			cfg.RespectGitIgnore = parseBool(value)
 		case "fail_on_severity":
