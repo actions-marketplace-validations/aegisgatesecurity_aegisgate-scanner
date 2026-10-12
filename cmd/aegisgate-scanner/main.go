@@ -44,6 +44,7 @@ import (
 	"github.com/aegisgatesecurity/aegisgate-scanner/internal/detectors"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/artifacts"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/baseline"
+	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/cache"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/config"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/output"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/plugins"
@@ -372,8 +373,54 @@ func runScan(args []string, globalLogLevel, globalLogFormat string) int {
 		scanOpts.Progress = makeProgressFunc(os.Stderr, len(walkResult.Artifacts))
 	}
 
+	// Set up content-hash cache if enabled (via --cache flag or config).
+	cacheEnabled := opts.cache || cfg.CacheEnabled
+	if opts.clearCache {
+		cachePath := opts.cacheDir
+		if cachePath == "" {
+			cachePath = cfg.CacheDir
+		}
+		if cachePath == "" {
+			cachePath = filepath.Join(absRoot, ".aegisgate-cache.json")
+		}
+		if err := cache.Clear(cachePath); err != nil {
+			slog.Error("failed to clear cache", "error", err)
+			return exitError
+		}
+		slog.Info("cache cleared", "path", cachePath)
+		return exitOK
+	}
+
+	var sc2 *cache.Cache
+	if cacheEnabled {
+		cachePath := opts.cacheDir
+		if cachePath == "" {
+			cachePath = cfg.CacheDir
+		}
+		if cachePath == "" {
+			cachePath = filepath.Join(absRoot, ".aegisgate-cache.json")
+		}
+		header := scanner.ComputeCacheHeader(Version, cfg.EnableML)
+		sc2, err = cache.Load(cachePath, header)
+		if err != nil {
+			slog.Warn("cache load failed, continuing without cache", "error", err)
+		} else {
+			scanOpts.Cache = sc2
+			slog.Info("cache enabled", "path", cachePath, "entries", sc2.EntryCount())
+		}
+	}
+
 	// Scan artifacts.
 	result := sc.ScanArtifacts(walkResult.Artifacts, scanOpts)
+
+	// Save cache if it was used and has new entries.
+	if sc2 != nil {
+		hits, misses := sc2.Stats()
+		slog.Info("cache stats", "hits", hits, "misses", misses)
+		if err := sc2.Save(); err != nil {
+			slog.Warn("cache save failed", "error", err)
+		}
+	}
 
 	// Generate baseline mode: save current findings and exit.
 	if opts.generateBaseline != "" {
@@ -822,6 +869,10 @@ func runDoctor(args []string) int {
 	fmt.Printf("  files w/ findings: %d\n", result.Stats.FilesWithFindings)
 	fmt.Printf("  total findings:    %d\n", result.Stats.TotalFindings)
 	fmt.Printf("  duration:          %v\n", result.Duration)
+	if result.Stats.CacheHits > 0 || result.Stats.CacheMisses > 0 {
+		fmt.Printf("  cache hits:        %d\n", result.Stats.CacheHits)
+		fmt.Printf("  cache misses:      %d\n", result.Stats.CacheMisses)
+	}
 
 	if len(result.Stats.BySeverity) > 0 {
 		fmt.Printf("  by severity:       ")
@@ -911,6 +962,9 @@ type scanArgs struct {
 	stdinExt         string
 	diffBase         string
 	extractArchives  bool
+	cache            bool
+	cacheDir         string
+	clearCache       bool
 }
 
 func parseScanArgs(args []string) (*scanArgs, error) {
@@ -1038,6 +1092,25 @@ func parseScanArgs(args []string) (*scanArgs, error) {
 
 		case arg == "--no-extract-archives":
 			opts.extractArchives = false
+
+		case arg == "--cache":
+			opts.cache = true
+
+		case arg == "--no-cache":
+			opts.cache = false
+
+		case arg == "--cache-dir":
+			i++
+			if i >= len(args) {
+				return nil, fmt.Errorf("--cache-dir requires a value")
+			}
+			opts.cacheDir = args[i]
+
+		case strings.HasPrefix(arg, "--cache-dir="):
+			opts.cacheDir = strings.TrimPrefix(arg, "--cache-dir=")
+
+		case arg == "--clear-cache":
+			opts.clearCache = true
 
 		case arg == "--config":
 			i++
@@ -1420,6 +1493,9 @@ Scan Options:
   --diff <base_branch>     Only scan files changed vs base branch
   --extract-archives       Extract archives before scanning (default: true)
   --no-extract-archives    Disable archive extraction
+  --cache                  Enable content-hash caching (skip unchanged files)
+  --cache-dir <path>       Cache file location (default: .aegisgate-cache.json)
+  --clear-cache            Delete cache file and exit
   --config <file>          Path to explicit config file (overrides .aegisgate.yml)
 
 Global Options:
@@ -1467,6 +1543,9 @@ Options:
   --diff <base_branch>     Only scan files changed vs base branch
   --extract-archives       Extract archives before scanning (default: true)
   --no-extract-archives    Disable archive extraction
+  --cache                  Enable content-hash caching (skip unchanged files)
+  --cache-dir <path>       Cache file location (default: .aegisgate-cache.json)
+  --clear-cache            Delete cache file and exit
   --config <file>          Path to explicit config file (overrides .aegisgate.yml)
 
 Global Options:

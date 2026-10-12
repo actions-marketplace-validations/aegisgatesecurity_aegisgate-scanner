@@ -958,3 +958,34 @@ func ResetCustomPatterns() {
 	defer customMu.Unlock()
 	customPatterns = nil
 }
+
+// AllPatternDefs returns all built-in pattern definitions from all
+// categories. This is used to compute a pattern set hash for cache
+// invalidation — any change to any pattern (add, remove, modify) will
+// produce a different hash, ensuring cached results are invalidated.
+func AllPatternDefs() []PatternDef {
+	return concatPatternDefs(
+		SecretsPatterns,
+		XSSPatterns,
+		PIIUSCorePatterns,
+		PIIUSExtendedPatterns,
+		PIIFinancialPatterns,
+		PIIInternationalPatterns,
+		CompliancePatterns,
+		DangerousFunctionPatterns,
+		OTProtocolPatterns,
+		TodoPatterns,
+	)
+}
+
+func concatPatternDefs(slices ...[]PatternDef) []PatternDef {
+	total := 0
+	for _, s := range slices {
+		total += len(s)
+	}
+	result := make([]PatternDef, 0, total)
+	for _, s := range slices {
+		result = append(result, s...)
+	}
+	return result
+}

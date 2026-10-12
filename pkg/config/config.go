@@ -85,6 +85,15 @@ type Config struct {
 	// known/accepted findings. If empty, no baseline is used.
 	BaselinePath string `yaml:"baseline_path"`
 
+	// CacheEnabled controls whether content-hash caching is used.
+	// When enabled, scan results are cached by SHA-256(file content)
+	// to skip re-scanning unchanged files. Default: false.
+	CacheEnabled bool `yaml:"cache_enabled"`
+
+	// CacheDir is the path to the cache file. If empty, defaults to
+	// .aegisgate-cache.json in the scan root directory.
+	CacheDir string `yaml:"cache_dir"`
+
 	// CustomRules are user-defined detection patterns.
 	// Each rule has a name, regex pattern, severity, category, and description.
 	CustomRules []CustomRuleConfig `yaml:"custom_rules"`
@@ -141,6 +150,8 @@ func Default() *Config {
 		ColorOutput:        true,
 		ModelPath:          "",
 		BaselinePath:       "",
+		CacheEnabled:       false,
+		CacheDir:           "",
 		RespectGitIgnore:   true,
 		FailOnSeverity:     "low",
 		DisableRules:       []string{},
@@ -524,6 +535,10 @@ func parseYAML(data []byte, cfg *Config) error {
 			cfg.ModelPath = value
 		case "baseline_path":
 			cfg.BaselinePath = value
+		case "cache_enabled":
+			cfg.CacheEnabled = parseBool(value)
+		case "cache_dir":
+			cfg.CacheDir = value
 		case "respect_gitignore":
 			cfg.RespectGitIgnore = parseBool(value)
 		case "fail_on_severity":

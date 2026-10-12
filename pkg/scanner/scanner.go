@@ -31,6 +31,7 @@ import (
 	"github.com/aegisgatesecurity/aegisgate-scanner/internal/detectors"
 	"github.com/aegisgatesecurity/aegisgate-scanner/internal/ml"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/artifacts"
+	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/cache"
 )
 
 // ---------------------------------------------------------------------
@@ -123,6 +124,13 @@ type ScanOptions struct {
 	// Progress is an optional callback invoked after each file is scanned.
 	// It receives (filesScanned, totalFiles). If nil, no progress is reported.
 	Progress ProgressFunc
+
+	// Cache is an optional content-hash cache. If set, scan results are
+	// cached by SHA-256(content). Files with unchanged content skip
+	// detection entirely on subsequent scans.
+	// Filters (severity, disable-rules, baseline, suppressions) are
+	// applied post-cache, so changing those does NOT invalidate the cache.
+	Cache *cache.Cache
 }
 
 // ProgressFunc is called to report scanning progress.
@@ -151,6 +159,12 @@ type ScanStats struct {
 	ByCategory        map[string]int
 	ByLayer           map[string]int
 	MLInferences      int
+
+	// CacheHits is the number of files served from cache (skipped scanning).
+	// CacheMisses is the number of files that required a full scan.
+	// Both are 0 when caching is not enabled.
+	CacheHits   int
+	CacheMisses int
 }
 
 // Scanner is the core scanner that combines detection engines.
@@ -200,32 +214,77 @@ func (s *Scanner) Close() error {
 	return nil
 }
 
+// ComputeCacheHeader builds a cache.CacheHeader for use with the
+// content-hash cache. It captures the scanner version, a hash of all
+// pattern definitions, and whether ML is enabled. Any change to
+// patterns or scanner version will invalidate cached results.
+//
+// scannerVersion should be the build-time version string (e.g., "0.3.0").
+func ComputeCacheHeader(scannerVersion string, mlEnabled bool) cache.CacheHeader {
+	defs := detectors.AllPatternDefs()
+	patternStrs := make([]string, len(defs))
+	for i, d := range defs {
+		patternStrs[i] = d.Name + "|" + d.Regex
+	}
+	return cache.CacheHeader{
+		Version:        cache.CacheVersion,
+		ScannerVersion: scannerVersion,
+		PatternSetHash: cache.PatternSetHash(patternStrs),
+		MLEnabled:      mlEnabled,
+	}
+}
+
 // ---------------------------------------------------------------------
 // Scanning
 // ---------------------------------------------------------------------
 
 // ScanArtifact scans a single artifact and returns findings.
+//
+// If a cache is provided in opts.Cache and the artifact content is
+// non-empty, the scanner first checks the cache for a stored result
+// keyed by SHA-256(content). On a cache hit, the raw findings are
+// returned from cache and only option-based filters are re-applied
+// (severity, disable-rules, max-findings, inline suppressions). On a
+// cache miss, all detection layers run and the raw findings are stored
+// in the cache before returning.
 func (s *Scanner) ScanArtifact(art artifacts.Artifact, opts ScanOptions) []Finding {
+	// Try cache first. If enabled and content is non-empty, check for
+	// a cached result before running any detection layers.
+	if opts.Cache != nil && art.Content != "" {
+		contentHash := cache.ContentHash(art.Content)
+		if cached := opts.Cache.Get(contentHash); cached != nil {
+			// Cache hit — convert cached findings and apply filters.
+			findings := fromCacheFindings(cached, art)
+			return s.applyFilters(art, findings, opts)
+		}
+		// Cache miss — run full detection, then cache raw findings.
+		rawFindings := s.detectAll(art)
+		opts.Cache.Put(contentHash, toCacheFindings(rawFindings), art.Size)
+		return s.applyFilters(art, rawFindings, opts)
+	}
+
+	// No cache — run detection and apply filters.
+	rawFindings := s.detectAll(art)
+	return s.applyFilters(art, rawFindings, opts)
+}
+
+// detectAll runs all detection layers (regex, entropy, ML) and returns
+// raw, unfiltered findings. This is the expensive part that caching avoids.
+func (s *Scanner) detectAll(art artifacts.Artifact) []Finding {
 	var findings []Finding
 
 	// --- Layer 1: Regex detection (language-aware) ---
 	regexFindings := s.scanRegex(art)
 
-	// Filter out disabled rules.
-	if len(opts.DisableRules) > 0 {
-		regexFindings = filterDisabledRules(regexFindings, opts.DisableRules)
-	}
-
 	// --- Layer 1b: Known example suppression ---
 	// Suppress findings that match known documentation/test values.
+	// This is part of raw detection (not option-based filtering) because
+	// it depends only on the content, not on scan options.
 	regexFindings = s.suppressKnownExamples(regexFindings)
 
 	findings = append(findings, regexFindings...)
 
 	// --- Layer 1c: Entropy detection (unknown secrets) ---
-	// Run entropy-based detection to catch secrets that don't match
-	// any known regex pattern. Only run if the file hasn't already
-	// been flagged by regex for the same region.
 	entropyFindings := s.scanEntropy(art, regexFindings)
 	findings = append(findings, entropyFindings...)
 
@@ -233,11 +292,22 @@ func (s *Scanner) ScanArtifact(art artifacts.Artifact, opts ScanOptions) []Findi
 	regexLines := buildRegexFindingLines(regexFindings)
 
 	// --- Layer 2: ML detection (supplementary) ---
-	// Only run ML if enabled AND the content is substantial enough.
-	// ML is supplementary — it catches what regex misses.
 	if s.mlEnabled && s.mlDetector != nil && s.mlDetector.IsEnabled() {
 		mlFindings := s.scanML(art, regexLines)
 		findings = append(findings, mlFindings...)
+	}
+
+	return findings
+}
+
+// applyFilters applies option-based filtering to raw findings.
+// These filters are NOT part of the cache key — changing them does not
+// invalidate the cache. This includes: disabled rules, severity threshold,
+// max findings per file, and inline suppressions.
+func (s *Scanner) applyFilters(art artifacts.Artifact, findings []Finding, opts ScanOptions) []Finding {
+	// Filter out disabled rules.
+	if len(opts.DisableRules) > 0 {
+		findings = filterDisabledRules(findings, opts.DisableRules)
 	}
 
 	// --- Filter by minimum severity ---
@@ -251,8 +321,6 @@ func (s *Scanner) ScanArtifact(art artifacts.Artifact, opts ScanOptions) []Findi
 	}
 
 	// --- Apply inline suppressions ---
-	// Parse aegisgate-ignore comments from the artifact content and
-	// filter out matching findings.
 	if art.Content != "" {
 		suppressions := ParseSuppressions(art.Content)
 		if len(suppressions) > 0 {
@@ -282,6 +350,14 @@ func (s *Scanner) ScanArtifacts(arts []artifacts.Artifact, opts ScanOptions) *Sc
 	}
 
 	result.Duration = time.Since(start)
+
+	// Collect cache stats if caching was enabled.
+	if opts.Cache != nil {
+		hits, misses := opts.Cache.Stats()
+		result.Stats.CacheHits = hits
+		result.Stats.CacheMisses = misses
+	}
+
 	return result
 }
 
@@ -373,6 +449,63 @@ func (s *Scanner) recordFindings(result *ScanResult, art artifacts.Artifact, fin
 
 		result.Findings = append(result.Findings, findings...)
 	}
+}
+
+// ---------------------------------------------------------------------
+// Cache conversion helpers
+// ---------------------------------------------------------------------
+
+// toCacheFindings converts scanner Finding slice to cache-friendly format.
+// Only detection-layer fields are preserved — option-based fields (like
+// artifact path) are re-applied on cache hit via fromCacheFindings.
+func toCacheFindings(findings []Finding) []cache.CacheFinding {
+	if len(findings) == 0 {
+		return nil
+	}
+	result := make([]cache.CacheFinding, len(findings))
+	for i, f := range findings {
+		result[i] = cache.CacheFinding{
+			RuleID:         f.RuleID,
+			Category:       f.Category,
+			Severity:       string(f.Severity),
+			Confidence:     f.Confidence,
+			Message:        f.Message,
+			Line:           f.Line,
+			Column:         f.Column,
+			EndLine:        f.EndLine,
+			EndColumn:      f.EndColumn,
+			MatchedText:    f.MatchedText,
+			DetectionLayer: f.DetectionLayer,
+		}
+	}
+	return result
+}
+
+// fromCacheFindings converts cached findings back to scanner Finding slice,
+// re-applying the artifact path and class from the current artifact.
+func fromCacheFindings(cached []cache.CacheFinding, art artifacts.Artifact) []Finding {
+	if len(cached) == 0 {
+		return nil
+	}
+	findings := make([]Finding, len(cached))
+	for i, c := range cached {
+		findings[i] = Finding{
+			Artifact:       art.Path,
+			ArtifactClass:  art.Class,
+			RuleID:         c.RuleID,
+			Category:       c.Category,
+			Severity:       Severity(c.Severity),
+			Confidence:     c.Confidence,
+			Message:        c.Message,
+			Line:           c.Line,
+			Column:         c.Column,
+			EndLine:        c.EndLine,
+			EndColumn:      c.EndColumn,
+			MatchedText:    c.MatchedText,
+			DetectionLayer: c.DetectionLayer,
+		}
+	}
+	return findings
 }
 
 // ---------------------------------------------------------------------
