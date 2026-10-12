@@ -7,7 +7,7 @@
 
 *Static analysis that detects prompt injection, PII, secrets, dangerous code, and compliance violations in RAG documents, training data, model configs, and agent skills — before they reach production.*
 
-257 regex patterns + CharCNN-BiLSTM (v13) ML · 7 output formats · SARIF · SBOM · GitHub Action · Dual Docker images · Zero runtime dependencies
+276 regex patterns + CharCNN-BiLSTM (v13) ML · 8 output formats · SARIF · SBOM · GitHub Action · Dual Docker images · Zero runtime dependencies
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://golang.org/)
@@ -19,8 +19,8 @@
 [![Fuzzed](https://img.shields.io/badge/Fuzzed-✅-purple.svg)](#testing)
 [![Race Detector](https://img.shields.io/badge/Race_Detector-✅-success.svg)](#testing)
 [![Docker](https://img.shields.io/badge/Docker-ML_+_Lite-blue.svg)](#docker)
-[![Patterns](https://img.shields.io/badge/Patterns-257-9cf.svg)](#detection-categories)
-[![Formats](https://img.shields.io/badge/Output-7_Formats-orange.svg)](#output-formats)
+[![Patterns](https://img.shields.io/badge/Patterns-276-9cf.svg)](#detection-categories)
+[![Formats](https://img.shields.io/badge/Output-8_Formats-orange.svg)](#output-formats)
 [![Patent Pending](https://img.shields.io/badge/IP-Patent_Pending-8B5CF6?logo=uspto)](#ip-notice)
 
 [Quick Start](#quick-start) · [Detection](#detection-categories) · [Output Formats](#output-formats) · [GitHub Action](#github-action) · [Docker](#docker) · [Testing](#testing) · [Releases](https://github.com/aegisgatesecurity/aegisgate-scanner/releases)
@@ -62,14 +62,20 @@ don't understand AI-specific threats. AegisGate Scanner does.**
 | SBOM generation | ❌ | ❌ | ✅ SPDX |
 | Diff/baseline suppression | ❌ | ❌ | ✅ |
 
-**257 detection patterns. 10+ categories. 7 output formats. Apache 2.0.**
+**276 detection patterns. 10 categories. 8 output formats. Apache 2.0.**
 
 ---
 
 ## Quick Start
 
 ```bash
-# Install (from source)
+# Install (curl — one-line installer with checksum verification)
+curl -fsSL https://raw.githubusercontent.com/aegisgatesecurity/aegisgate-scanner/main/install.sh | bash
+
+# Or via Homebrew
+brew install aegisgatesecurity/tap/aegisgate-scanner
+
+# Or from source
 go install github.com/aegisgatesecurity/aegisgate-scanner/cmd/aegisgate-scanner@latest
 
 # Scan a directory
@@ -80,6 +86,9 @@ aegisgate-scanner scan ./rag-docs --format sarif -o results.sarif
 
 # Pipe content via stdin
 cat suspicious_agent_skill.py | aegisgate-scanner scan - --stdin-ext .py
+
+# Self-test (verify installation)
+aegisgate-scanner doctor
 ```
 
 ## Installation
@@ -90,6 +99,11 @@ cat suspicious_agent_skill.py | aegisgate-scanner scan - --stdin-ext .py
 git clone https://github.com/aegisgatesecurity/aegisgate-scanner.git
 cd aegisgate-scanner
 
+# Using Makefile
+make build          # ML-enabled (requires CGO)
+make build-lite     # Lite (no ML, pure static binary)
+
+# Or directly
 # Lite build (no ML, pure static binary)
 CGO_ENABLED=0 go build -o aegisgate-scanner ./cmd/aegisgate-scanner/
 
@@ -137,9 +151,10 @@ docker run --rm -v $(pwd):/github/workspace aegisgate-scanner:lite scan /github/
 | **Compliance** | 35 | HIPAA, GDPR, EU AI Act, COPPA, CCPA safety protocol bypass |
 | **Dangerous Functions** | 34 | `eval()`, `exec()`, `os.system()`, `subprocess`, `pickle.load()`, `child_process.exec()` |
 | **OT/ICS Protocols** | 9 | Modbus, S7comm, DNP3, BACnet, EtherCAT, OPC UA, Profinet |
+| **Technical Debt** | 8 | TODO, FIXME, HACK, XXX, BUG, NOTE — security-flagged markers |
 | **ML (optional)** | 1 model | CharCNN-BiLSTM neural detector for adversarial prompt injection |
 
-**Total: 257 regex patterns + optional ML detection.**
+**Total: 276 regex patterns + optional ML detection.**
 
 ## Output Formats
 
@@ -147,11 +162,12 @@ docker run --rm -v $(pwd):/github/workspace aegisgate-scanner:lite scan /github/
 |--------|------|----------|
 | **Text** | `--format text` (default) | Terminal / human-readable |
 | **JSON** | `--format json` | Programmatic / API integration |
+| **JSONL** | `--format jsonl` | NDJSON — one finding per line (jq, Splunk, ELK, Datadog) |
 | **SARIF** | `--format sarif` | GitHub Code Scanning / CI/CD |
 | **HTML** | `--format html` | Reports / email / sharing |
-| **GitHub Actions** | `--format github` | PR annotations in CI |
+| **PR Comment** | `--format pr-comment` | Pull request comment (markdown table) |
+| **GitHub Actions** | `--format github-actions` | PR annotations in CI |
 | **SBOM** | `--format sbom` | SPDX software bill of materials |
-| **Diff** | `--format diff` | Show only new findings vs. baseline |
 
 ## CLI Reference
 
@@ -185,6 +201,12 @@ cat config.yaml | aegisgate-scanner scan - --stdin-ext .yaml
 
 # Version
 aegisgate-scanner version
+
+# Self-test (verify installation, scan own codebase)
+aegisgate-scanner doctor
+
+# Structured logging (JSON for SIEM/Splunk/Datadog)
+aegisgate-scanner scan ./project --log-level debug --log-format json
 ```
 
 ### Exit Codes
@@ -299,24 +321,24 @@ All 9 testable packages maintain ≥90% coverage:
 
 | Package | Coverage |
 |---------|----------|
-| cmd/aegisgate-scanner | 90.0% |
-| internal/detectors | 99.0% |
+| cmd/aegisgate-scanner | 90.9% |
+| internal/detectors | 98.8% |
 | pkg/api | 90.5% |
-| pkg/artifacts | 93.3% |
+| pkg/artifacts | 93.4% |
 | pkg/baseline | 90.2% |
-| pkg/config | 97.2% |
+| pkg/config | 95.8% |
 | pkg/output | 95.6% |
 | pkg/plugins | 92.7% |
-| pkg/scanner | 96.7% |
+| pkg/scanner | 97.6% |
 
 ### Test Types
 
 | Type | Count | Description |
 |------|-------|-------------|
-| Unit tests | 995+ | Per-function correctness |
+| Unit tests | 1,080+ | Per-function correctness |
 | Benchmark tests | 8 | Performance regression detection |
 | Fuzz tests | 6 | Random input crash detection |
-| Race tests | 5 | Concurrent access validation |
+| Race tests | 7 | Concurrent access validation |
 | Archive security tests | 12 | Bomb/traversal/symlink protection |
 | Evasion suite | 1 | Adversarial detection resistance (50 transforms × 52 payloads) |
 | E2E tests | 10 | Full pipeline integration (CI workflow) |
@@ -343,15 +365,18 @@ go test -fuzz=FuzzScanArtifact -fuzztime=30s ./pkg/scanner/
 ```
 aegisgate-scanner/
 ├── cmd/aegisgate-scanner/   # CLI entrypoint
-├── internal/detectors/       # Detection engine + 257 patterns
+├── internal/detectors/       # Detection engine + 276 patterns
 ├── internal/ml/              # CharCNN-BiLSTM ML threat detector
 ├── pkg/api/                  # Public API/SDK
 ├── pkg/artifacts/            # File walker, archive extraction
 ├── pkg/baseline/             # Baseline suppression
 ├── pkg/config/               # Configuration management
-├── pkg/output/               # Output formatters (7 formats)
+├── pkg/output/               # Output formatters (8 formats)
 ├── pkg/plugins/              # Custom rule plugin system
 ├── pkg/scanner/              # Scan orchestration
+├── Makefile                  # Build targets (build, test, lint, release)
+├── install.sh                # curl-based installer with checksum verification
+├── Formula/                  # Homebrew formula
 ├── Dockerfile                # Dual-target (ml + lite)
 ├── action.yml                # GitHub Action
 └── .github/workflows/        # CI, E2E, Release, Security workflows
@@ -359,12 +384,23 @@ aegisgate-scanner/
 
 ## Roadmap
 
-- [ ] Performance: alternation regex compilation (257→1 pass)
+### Completed in v0.2.0-dev
+- [x] Structured logging via `slog` with `--log-level` and `--log-format` flags
+- [x] JSONL (NDJSON) output format for SIEM/log aggregation
+- [x] `doctor` self-test command
+- [x] TODO/FIXME/HACK/XXX/BUG technical debt detection (8 patterns)
+- [x] Makefile, install.sh, Homebrew formula
+
+### Planned
+- [ ] Performance: alternation regex compilation (276→1 pass)
 - [ ] Real-world corpus validation (100+ known-poisoned artifacts)
-- [ ] Remediation guidance in findings
+- [ ] Content-hash scan caching (skip unchanged files across runs)
+- [ ] Streaming scan mode for large files (chunk-based processing)
+- [ ] Competitive benchmark report (vs TruffleHog, Gitleaks, Semgrep)
+- [ ] Transformer-based ML model upgrade (DistilBERT/BERT)
+- [ ] Multimodal artifact support (image-based prompt injection)
+- [ ] Model weight analysis (backdoor detection)
 - [ ] Additional archive formats (.7z, .rar)
-- [ ] Custom pattern marketplace
-- [ ] Webhook notification support
 
 ## Changelog
 
