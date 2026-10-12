@@ -190,6 +190,28 @@ func findConfigFile(scanRoot string) string {
 	return ""
 }
 
+// LoadFile loads configuration from an explicit file path. This allows
+// users to specify a config file via --config flag that may be located
+// outside the scan root (e.g., a central security config repository).
+func LoadFile(path string) (*Config, error) {
+	cfg := Default()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config file %s: %w", path, err)
+	}
+
+	if err := parseYAML(data, cfg); err != nil {
+		return nil, fmt.Errorf("parse config file %s: %w", path, err)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config in %s: %w", path, err)
+	}
+
+	return cfg, nil
+}
+
 // ---------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------

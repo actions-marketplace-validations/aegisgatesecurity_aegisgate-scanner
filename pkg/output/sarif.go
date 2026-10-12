@@ -68,15 +68,19 @@ type sarifRule struct {
 	Properties       sarifRuleProps `json:"properties,omitempty"`
 }
 
-// sarifRuleProps holds rule properties for GitHub UI, including CWE and
-// OWASP LLM Top 10 references from the rule metadata database.
+// sarifRuleProps holds rule properties for GitHub UI, including CWE,
+// OWASP LLM Top 10, NIST AI RMF, NIST CSF 2.0, and EU AI Act references
+// from the rule metadata database.
 type sarifRuleProps struct {
-	Tags      []string `json:"tags,omitempty"`
-	Precision string   `json:"precision,omitempty"`
-	Severity  string   `json:"severity,omitempty"`
-	Category  string   `json:"category,omitempty"`
-	CWE       []int    `json:"cwe,omitempty"`
-	OWASP     string   `json:"owasp,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+	Precision    string   `json:"precision,omitempty"`
+	Severity     string   `json:"severity,omitempty"`
+	Category     string   `json:"category,omitempty"`
+	CWE          []int    `json:"cwe,omitempty"`
+	OWASP        string   `json:"owasp,omitempty"`
+	NISTAIRMF    []string `json:"nist-ai-rmf,omitempty"`
+	NISTCSF      []string `json:"nist-csf,omitempty"`
+	EUAIArticles []string `json:"eu-ai-act,omitempty"`
 }
 
 // sarifResult represents a single finding.
@@ -208,12 +212,15 @@ func buildSARIFRules(result *scanner.ScanResult) []sarifRule {
 			},
 			HelpURI: "https://aegisgatesecurity.io/docs/scanner/rules/" + f.RuleID,
 			Properties: sarifRuleProps{
-				Tags:      buildRuleTags(f),
-				Precision: "high",
-				Severity:  string(f.Severity),
-				Category:  f.Category,
-				CWE:       meta.CWE,
-				OWASP:     meta.OWASPLLMTop,
+				Tags:         buildRuleTags(f),
+				Precision:    "high",
+				Severity:     string(f.Severity),
+				Category:     f.Category,
+				CWE:          meta.CWE,
+				OWASP:        meta.OWASPLLMTop,
+				NISTAIRMF:    meta.NISTAIRMF,
+				NISTCSF:      meta.NISTCSF,
+				EUAIArticles: meta.EUAIArticles,
 			},
 		}
 

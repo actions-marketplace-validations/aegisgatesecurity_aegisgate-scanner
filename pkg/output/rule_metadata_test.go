@@ -38,6 +38,16 @@ func TestGetRuleMetadata_PromptInjection(t *testing.T) {
 	if m.Remediation == "" {
 		t.Error("expected non-empty remediation for prompt injection")
 	}
+	// Verify NIST AI RMF enrichment from OWASP LLM Top 10 cross-reference.
+	if len(m.NISTAIRMF) == 0 {
+		t.Error("expected non-empty NIST AIRMF for prompt injection (LLM01)")
+	}
+	if len(m.NISTCSF) == 0 {
+		t.Error("expected non-empty NIST CSF for prompt injection (LLM01)")
+	}
+	if len(m.EUAIArticles) == 0 {
+		t.Error("expected non-empty EU AI Act articles for prompt injection (LLM01)")
+	}
 }
 
 func TestGetRuleMetadata_PromptInjectionByPrefix(t *testing.T) {

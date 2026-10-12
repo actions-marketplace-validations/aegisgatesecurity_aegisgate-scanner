@@ -43,34 +43,83 @@ import "strings"
 // RuleMetadata holds CWE, OWASP, and remediation information for a
 // detection rule.
 type RuleMetadata struct {
-	RuleID      string   // e.g., "owasp_llm01_prompt_injection"
-	CWE         []int    // e.g., [77]
-	OWASPLLMTop string   // e.g., "LLM01"
-	OWASPName   string   // e.g., "Prompt Injection"
-	Description string   // human-readable description
-	Remediation string   // how to fix it
-	References  []string // URLs to docs
+	RuleID       string   // e.g., "owasp_llm01_prompt_injection"
+	CWE          []int    // e.g., [77]
+	OWASPLLMTop  string   // e.g., "LLM01"
+	OWASPName    string   // e.g., "Prompt Injection"
+	NISTAIRMF    []string // NIST AI RMF functions: Govern, Map, Measure, Manage
+	NISTCSF      []string // NIST CSF 2.0 subcategories: PR.AC-1, DE.CM-1, etc.
+	EUAIArticles []string // EU AI Act articles: Art. 10, Art. 14, Art. 15, etc.
+	Description  string   // human-readable description
+	Remediation  string   // how to fix it
+	References   []string // URLs to docs
 }
 
 // ---------------------------------------------------------------------
 // OWASP LLM Top 10 constant mapping
 // ---------------------------------------------------------------------
 
-// owaspLLMMap maps OWASP LLM Top 10 identifiers to their CWE and name.
+// owaspLLMMap maps OWASP LLM Top 10 identifiers to their CWE, name,
+// NIST AI RMF functions, NIST CSF 2.0 subcategories, and EU AI Act
+// article references. Framework mappings are derived from the AegisGate
+// ATLAS → Compliance Coverage Map (v1.0, Aug 2026).
 var owaspLLMMap = map[string]struct {
-	CWE  int
-	Name string
+	CWE          int
+	Name         string
+	NISTAIRMF    []string
+	NISTCSF      []string
+	EUAIArticles []string
 }{
-	"LLM01": {77, "Prompt Injection"},
-	"LLM02": {20, "Insecure Output Handling"},
-	"LLM03": {506, "Training Data Poisoning"},
-	"LLM04": {770, "Model DoS"},
-	"LLM05": {829, "Supply Chain"},
-	"LLM06": {200, "Sensitive Info Disclosure"},
-	"LLM07": {1117, "Insecure Plugin Design"},
-	"LLM08": {250, "Excessive Agency"},
-	"LLM09": {710, "Overreliance"},
-	"LLM10": {1242, "Model Theft"},
+	"LLM01": {77, "Prompt Injection",
+		[]string{"Map", "Measure", "Manage"},
+		[]string{"PR.AC-1", "DE.CM-1"},
+		[]string{"Art. 14", "Art. 15"},
+	},
+	"LLM02": {20, "Insecure Output Handling",
+		[]string{"Measure", "Manage"},
+		[]string{"DE.CM-7", "ID.RA-2"},
+		[]string{"Art. 10", "Art. 15"},
+	},
+	"LLM03": {506, "Training Data Poisoning",
+		[]string{"Map", "Measure", "Manage"},
+		[]string{"ID.RA-2", "DE.CM-7"},
+		[]string{"Art. 10"},
+	},
+	"LLM04": {770, "Model DoS",
+		[]string{"Measure", "Manage"},
+		[]string{"PR.DS-4", "DE.CM-1"},
+		[]string{"Art. 15"},
+	},
+	"LLM05": {829, "Supply Chain",
+		[]string{"Map", "Measure", "Manage"},
+		[]string{"ID.RA-2", "PR.AC-4"},
+		[]string{"Art. 10", "Art. 15"},
+	},
+	"LLM06": {200, "Sensitive Info Disclosure",
+		[]string{"Govern", "Measure", "Manage"},
+		[]string{"PR.AC-1", "DE.CM-1"},
+		[]string{"Art. 14", "Art. 15"},
+	},
+	"LLM07": {1117, "Insecure Plugin Design",
+		[]string{"Map", "Measure", "Manage"},
+		[]string{"DE.CM-7", "PR.AC-4"},
+		[]string{"Art. 15"},
+	},
+	"LLM08": {250, "Excessive Agency",
+		[]string{"Govern", "Measure", "Manage"},
+		[]string{"PR.AC-1", "PR.AC-4"},
+		[]string{"Art. 14", "Art. 15"},
+	},
+	"LLM09": {710, "Overreliance",
+		[]string{"Govern", "Map"},
+		[]string{"ID.RA-2"},
+		[]string{"Art. 14"},
+	},
+	"LLM10": {1242, "Model Theft",
+		[]string{"Govern", "Measure", "Manage"},
+		[]string{"ID.RA-2", "DE.CM-7"},
+		[]string{"Art. 10", "Art. 15"},
+	},
 }
 
 // ---------------------------------------------------------------------
@@ -616,6 +665,15 @@ var prefixMatchers = []prefixMatcher{
 func GetRuleMetadata(ruleID string) RuleMetadata {
 	// Exact match.
 	if m, ok := ruleMetadataMap[ruleID]; ok {
+		// Enrich with NIST/EU framework mappings from the OWASP LLM Top 10
+		// cross-reference table if not already populated.
+		if m.OWASPLLMTop != "" && len(m.NISTAIRMF) == 0 {
+			if owasp, ok := owaspLLMMap[m.OWASPLLMTop]; ok {
+				m.NISTAIRMF = owasp.NISTAIRMF
+				m.NISTCSF = owasp.NISTCSF
+				m.EUAIArticles = owasp.EUAIArticles
+			}
+		}
 		return m
 	}
 
@@ -626,6 +684,14 @@ func GetRuleMetadata(ruleID string) RuleMetadata {
 			if strings.HasPrefix(lower, p) {
 				result := pm.template
 				result.RuleID = ruleID
+				// Enrich with NIST/EU framework mappings.
+				if result.OWASPLLMTop != "" {
+					if owasp, ok := owaspLLMMap[result.OWASPLLMTop]; ok {
+						result.NISTAIRMF = owasp.NISTAIRMF
+						result.NISTCSF = owasp.NISTCSF
+						result.EUAIArticles = owasp.EUAIArticles
+					}
+				}
 				return result
 			}
 		}
@@ -636,6 +702,12 @@ func GetRuleMetadata(ruleID string) RuleMetadata {
 	if strings.Contains(lower, "prompt_injection") {
 		result := prefixMatchers[0].template // prompt injection template
 		result.RuleID = ruleID
+		// Enrich with NIST/EU framework mappings.
+		if owasp, ok := owaspLLMMap[result.OWASPLLMTop]; ok {
+			result.NISTAIRMF = owasp.NISTAIRMF
+			result.NISTCSF = owasp.NISTCSF
+			result.EUAIArticles = owasp.EUAIArticles
+		}
 		return result
 	}
 

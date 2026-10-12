@@ -126,10 +126,19 @@ func runScan(args []string) int {
 	}
 
 	// Load configuration (merges defaults + .aegisgate.yml + CLI overrides).
-	cfg, err := config.Load(absRoot)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: configuration error: %v\n", err)
-		return exitError
+	var cfg *config.Config
+	if opts.configPath != "" {
+		cfg, err = config.LoadFile(opts.configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: configuration error (%s): %v\n", opts.configPath, err)
+			return exitError
+		}
+	} else {
+		cfg, err = config.Load(absRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: configuration error: %v\n", err)
+			return exitError
+		}
 	}
 
 	// Apply CLI overrides.
@@ -437,6 +446,7 @@ type scanArgs struct {
 	path             string
 	format           string
 	output           string
+	configPath       string
 	minSeverity      string
 	noML             bool
 	noColor          bool
@@ -577,6 +587,16 @@ func parseScanArgs(args []string) (*scanArgs, error) {
 
 		case arg == "--no-extract-archives":
 			opts.extractArchives = false
+
+		case arg == "--config":
+			i++
+			if i >= len(args) {
+				return nil, fmt.Errorf("--config requires a value")
+			}
+			opts.configPath = args[i]
+
+		case strings.HasPrefix(arg, "--config="):
+			opts.configPath = strings.TrimPrefix(arg, "--config=")
 
 		case strings.HasPrefix(arg, "--format="):
 			opts.format = strings.TrimPrefix(arg, "--format=")
@@ -933,6 +953,7 @@ Scan Options:
   --diff <base_branch>     Only scan files changed vs base branch
   --extract-archives       Extract archives before scanning (default: true)
   --no-extract-archives    Disable archive extraction
+  --config <file>          Path to explicit config file (overrides .aegisgate.yml)
 
 Stdin/Pipe Support:
   cat file.json | aegisgate-scanner scan - --stdin-ext .json
@@ -975,6 +996,7 @@ Options:
   --diff <base_branch>     Only scan files changed vs base branch
   --extract-archives       Extract archives before scanning (default: true)
   --no-extract-archives    Disable archive extraction
+  --config <file>          Path to explicit config file (overrides .aegisgate.yml)
 
 Stdin/Pipe Support:
   Use "-" as path to read from stdin:
