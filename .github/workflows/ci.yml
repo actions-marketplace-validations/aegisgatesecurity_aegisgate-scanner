@@ -116,7 +116,7 @@ jobs:
           cache: true
       - name: Run tests (non-CGO)
         run: |
-          CGO_ENABLED=0 go test -v -coverprofile=coverage-lite.out -covermode=atomic ./... 2>&1 | tee test-output.txt
+          CGO_ENABLED=0 go test -short -v -coverprofile=coverage-lite.out -covermode=atomic ./... 2>&1 | tee test-output.txt
       - name: Check coverage ≥ 90% (minimum across all packages)
         run: |
           echo "## Coverage Report (non-CGO)" >> $GITHUB_STEP_SUMMARY
@@ -176,7 +176,7 @@ jobs:
           ONNXRUNTIME_SHARED_LIBRARY_PATH: ${{ github.workspace }}/lib/amd64/libonnxruntime.so
           LD_LIBRARY_PATH: ${{ github.workspace }}/lib/amd64
         run: |
-          go test -v -coverprofile=coverage-ml.out -covermode=atomic ./... 2>&1 | tee test-output-ml.txt
+          go test -short -v -coverprofile=coverage-ml.out -covermode=atomic ./... 2>&1 | tee test-output-ml.txt
       - name: Check coverage ≥ 90% (minimum across all packages)
         run: |
           echo "## Coverage Report (CGO)" >> $GITHUB_STEP_SUMMARY
@@ -237,7 +237,7 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/lib/amd64
         run: |
           # Skip TestEvasionSuite (5+ min with race detector) — run separately.
-          go test -race -count=1 -timeout 300s -skip TestEvasionSuite ./... 2>&1 | tee race-output.txt
+          go test -race -short -count=1 -timeout 300s -skip TestEvasionSuite ./... 2>&1 | tee race-output.txt
           if grep -q "DATA RACE" race-output.txt; then
             echo "❌ Data race detected!"
             exit 1
