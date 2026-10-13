@@ -10,7 +10,7 @@
 268 regex patterns + CharCNN-BiLSTM (v13) ML · 8 output formats · SARIF · SBOM · GitHub Action · Dual Docker images · Zero runtime dependencies
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://golang.org/)
+[![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go)](https://golang.org/)
 [![Version](https://img.shields.io/badge/Version-0.3.0-blue.svg)](#changelog)
 [![Coverage](https://img.shields.io/badge/Coverage-90%25+-brightgreen.svg)](#testing)
 [![CI](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/ci.yml)
@@ -127,7 +127,7 @@ docker run --rm -v $(pwd):/github/workspace aegisgate-scanner:lite scan /github/
 ### GitHub Actions
 
 ```yaml
-- uses: aegisgatesecurity/aegisgate-scanner@v0.3.0
+- uses: aegisgatesecurity/aegisgate-scanner@v0      # moving tag (auto-updates)
   with:
     path: '.'
     format: 'sarif'
@@ -136,6 +136,8 @@ docker run --rm -v $(pwd):/github/workspace aegisgate-scanner:lite scan /github/
   with:
     sarif_file: aegisgate-report.sarif
 ```
+
+> **Pin for reproducibility:** use `@v0.3.0` instead of `@v0` to lock to a specific release.
 
 ## Detection Categories
 

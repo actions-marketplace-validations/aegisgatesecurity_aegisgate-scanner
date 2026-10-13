@@ -9,7 +9,7 @@
 # Example workflow:
 #
 #   steps:
-#     - uses: actions/checkout@v4
+#     - uses: actions/checkout@v7
 #     - uses: aegisgatesecurity/aegisgate-scanner@v0.3.0
 #       with:
 #         path: '.'
