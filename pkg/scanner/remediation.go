@@ -79,7 +79,7 @@ var categoryRemediation = map[string]string{
 }
 
 // ruleRemediation maps specific high-frequency rules to tailored guidance.
-var ruleRemediation = map[string]string{
+var ruleRemediation = map[string]string{ //nosec G101 -- remediation guidance text, not actual credentials
 	"secret_aws_key":                                      "Remove the AWS access key ID from the artifact. Rotate the key in AWS IAM Console immediately. Use IAM roles or AWS Secrets Manager instead.",
 	"secret_github_token":                                 "Remove the GitHub token from the artifact. Revoke it at https://github.com/settings/tokens immediately. Use GITHUB_TOKEN in Actions or a secrets manager.",
 	"secret_openai_key":                                   "Remove the OpenAI API key from the artifact. Rotate it at https://platform.openai.com/api-keys immediately. Use environment variables or a secrets manager.",

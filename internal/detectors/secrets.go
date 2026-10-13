@@ -363,19 +363,19 @@ var SecretsPatterns = []PatternDef{
 	{
 		Name:        "secret_rsa_private_key",
 		Severity:    SeverityCritical,
-		Regex:       `-----BEGIN (?:RSA )?PRIVATE KEY-----`,
+		Regex:       `-----BEGIN (?:RSA )?PRIVATE KEY-----`, //nosec G101 -- regex pattern for detecting private keys, not an actual key
 		Description: "RSA private key",
 	},
 	{
 		Name:        "secret_ec_private_key",
 		Severity:    SeverityCritical,
-		Regex:       `-----BEGIN EC PRIVATE KEY-----`,
+		Regex:       `-----BEGIN EC PRIVATE KEY-----`, //nosec G101 -- regex pattern for detecting private keys, not an actual key
 		Description: "EC private key",
 	},
 	{
 		Name:        "secret_openssh_private_key",
 		Severity:    SeverityCritical,
-		Regex:       `-----BEGIN OPENSSH PRIVATE KEY-----`,
+		Regex:       `-----BEGIN OPENSSH PRIVATE KEY-----`, //nosec G101 -- regex pattern for detecting private keys, not an actual key
 		Description: "OpenSSH private key",
 	},
 	{
