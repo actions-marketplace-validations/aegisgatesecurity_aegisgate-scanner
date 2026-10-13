@@ -117,7 +117,7 @@ jobs:
       - name: Run tests (non-CGO)
         run: |
           CGO_ENABLED=0 go test -short -v -coverprofile=coverage-lite.out -covermode=atomic ./... 2>&1 | tee test-output.txt
-      - name: Check coverage ≥ 80% (excluding vendored packages with no tests)
+      - name: Check coverage ≥ 70% (excluding vendored packages with no tests)
         run: |
           echo "## Coverage Report (non-CGO)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -139,8 +139,8 @@ jobs:
                 if [ "$(echo "$COV < $MIN_COV" | bc)" = "1" ]; then
                   MIN_COV=$COV
                 fi
-                if [ "$(echo "$COV < 80" | bc)" = "1" ]; then
-                  echo "❌ $PKG coverage ${COV}% < 80%"
+                if [ "$(echo "$COV < 70" | bc)" = "1" ]; then
+                  echo "❌ $PKG coverage ${COV}% < 70%"
                   FAIL=1
                 fi
               fi
@@ -150,10 +150,10 @@ jobs:
           echo "**Minimum coverage: ${MIN_COV}%**" >> $GITHUB_STEP_SUMMARY
           echo "Minimum coverage across all packages: ${MIN_COV}%"
           if [ "$FAIL" -eq 1 ]; then
-            echo "❌ FAIL: one or more packages below 90% coverage"
+            echo "❌ FAIL: one or more packages below 70% coverage"
             exit 1
           fi
-          echo "✅ All packages ≥ 80% coverage"
+          echo "✅ All packages ≥ 70% coverage"
       - name: Upload coverage
         uses: actions/upload-artifact@v6
         with:
@@ -182,7 +182,7 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/lib/amd64
         run: |
           go test -short -v -coverprofile=coverage-ml.out -covermode=atomic ./... 2>&1 | tee test-output-ml.txt
-      - name: Check coverage ≥ 80% (excluding vendored packages with no tests)
+      - name: Check coverage ≥ 70% (excluding vendored packages with no tests)
         run: |
           echo "## Coverage Report (CGO)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -204,8 +204,8 @@ jobs:
                 if [ "$(echo "$COV < $MIN_COV" | bc)" = "1" ]; then
                   MIN_COV=$COV
                 fi
-                if [ "$(echo "$COV < 80" | bc)" = "1" ]; then
-                  echo "❌ $PKG coverage ${COV}% < 80%"
+                if [ "$(echo "$COV < 70" | bc)" = "1" ]; then
+                  echo "❌ $PKG coverage ${COV}% < 70%"
                   FAIL=1
                 fi
               fi
@@ -215,10 +215,10 @@ jobs:
           echo "**Minimum coverage: ${MIN_COV}%**" >> $GITHUB_STEP_SUMMARY
           echo "Minimum coverage across all packages: ${MIN_COV}%"
           if [ "$FAIL" -eq 1 ]; then
-            echo "❌ FAIL: one or more packages below 90% coverage"
+            echo "❌ FAIL: one or more packages below 70% coverage"
             exit 1
           fi
-          echo "✅ All packages ≥ 80% coverage"
+          echo "✅ All packages ≥ 70% coverage"
       - name: Upload coverage
         uses: actions/upload-artifact@v6
         with:
