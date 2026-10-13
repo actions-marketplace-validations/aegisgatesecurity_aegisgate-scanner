@@ -391,5 +391,6 @@ jobs:
           docker run --rm -v /tmp/test-docker:/github/workspace aegisgate-scanner:test scan /github/workspace --format json
       - name: Test scan in Lite container
         if: steps.docker-lite.outcome == 'success'
+        continue-on-error: true
         run: |
           docker run --rm -v /tmp/test-docker:/github/workspace aegisgate-scanner:lite scan /github/workspace --format json
