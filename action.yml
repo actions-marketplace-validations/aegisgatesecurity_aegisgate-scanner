@@ -39,7 +39,7 @@
 # See the README for full CLI documentation.
 
 name: 'AegisGate Scanner'
-description: 'Static analysis for AI artifacts — detect prompt injection, PII, secrets, and compliance violations in RAG docs, training data, model configs, and agent skills'
+description: 'Static analysis for AI artifacts: detect prompt injection, PII, secrets, and compliance violations before production'
 branding:
   icon: 'shield'
   color: 'blue'
