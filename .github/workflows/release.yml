@@ -148,14 +148,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Generate CycloneDX SBOM
-        uses: anchore/sbom-action@0.24.3
+        uses: anchore/sbom-action@v0.24.3
         with:
           format: cyclonedx-json
           output-file: sbom-cyclonedx.json
           upload-artifact: false
           upload-release-assets: false
       - name: Generate SPDX SBOM
-        uses: anchore/sbom-action@0.24.3
+        uses: anchore/sbom-action@v0.24.3
         with:
           format: spdx-json
           output-file: sbom-spdx.json

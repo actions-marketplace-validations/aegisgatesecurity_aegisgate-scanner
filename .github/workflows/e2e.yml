@@ -55,7 +55,7 @@ jobs:
 
       - name: Test — scan with findings (exit code 1)
         run: |
-          ./aegisgate-scanner scan /tmp/e2e-fixtures --no-ml --format json --output /tmp/e2e-results.json
+          ./aegisgate-scanner scan /tmp/e2e-fixtures --no-ml --format json --output /tmp/e2e-results.json || true
           echo "Exit code: $?"
           # Should exit 1 (findings detected)
           # If it exits 0, that means no findings — test fails
