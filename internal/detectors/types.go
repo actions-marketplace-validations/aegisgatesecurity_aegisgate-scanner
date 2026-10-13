@@ -32,7 +32,6 @@ const (
 	CategoryXSS               Category = "xss"
 	CategoryCompliance        Category = "compliance"
 	CategoryDangerousFunction Category = "dangerous_function"
-	CategoryTodo              Category = "technical-debt"
 	CategoryOT                Category = "ot-protocols"
 )
 

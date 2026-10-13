@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-The AegisGate Scanner was subjected to a comprehensive testing program covering load/stress/crush testing (k6-style), security pentesting (Kali-style adversarial inputs), and metrics collection. **All 1,227 test functions pass.** No crashes, no data races, no memory leaks, no security bypasses in core detection. The scanner is robust under extreme load and safe against adversarial inputs.
+The AegisGate Scanner was subjected to a comprehensive testing program covering load/stress/crush testing (k6-style), security pentesting (Kali-style adversarial inputs), and metrics collection. **All 1,207 test functions pass.** No crashes, no data races, no memory leaks, no security bypasses in core detection. The scanner is robust under extreme load and safe against adversarial inputs.
 
 **76 new test functions** were added across 5 new test files totaling **3,130 LOC**.
 
@@ -25,7 +25,7 @@ The AegisGate Scanner was subjected to a comprehensive testing program covering 
 | CLI Pentest | 6 | ✅ All pass |
 | Race Tests | 5 | ✅ Clean |
 | Existing Tests | 1,101 | ✅ All pass |
-| **Total** | **1,227** | **✅ All pass** |
+| **Total** | **1,207** | **✅ All pass** |
 
 ---
 
@@ -97,7 +97,7 @@ The AegisGate Scanner was subjected to a comprehensive testing program covering 
 | Compliance patterns | 5 complex inputs | 5s each | ✅ All complete |
 | Plugin ReDoS (a+)+b | 30 'a's + '!' | 5s | ✅ Complete |
 
-**Verdict: No ReDoS vulnerability found in any of the 276 built-in patterns or custom plugin patterns.**
+**Verdict: No ReDoS vulnerability found in any of the 268 built-in patterns or custom plugin patterns.**
 
 ### Input Injection
 
@@ -210,9 +210,9 @@ The AegisGate Scanner was subjected to a comprehensive testing program covering 
 | Source LOC | 37,640 |
 | Test LOC | 29,184 |
 | Test/Source Ratio | 0.78 |
-| Test Functions | 1,227 |
+| Test Functions | 1,207 |
 | Test Files | 58 |
-| Detection Patterns | 276 |
+| Detection Patterns | 268 |
 | Output Formats | 8 |
 | CLI Commands | 5 |
 | Global Flags | 2 |
@@ -224,7 +224,7 @@ The AegisGate Scanner was subjected to a comprehensive testing program covering 
 
 ## Known Limitations (Not Bugs)
 
-1. **Large file performance**: A 10MB file takes ~224s due to 276 regex patterns each scanning the full content. The scanner is optimized for many-file scanning, not single huge files. The walker's 10MB default file size limit mitigates this.
+1. **Large file performance**: A 10MB file takes ~18.8s due to 268 regex patterns each scanning the full content. The scanner is optimized for many-file scanning, not single huge files. The walker's 10MB default file size limit mitigates this.
 
 2. **Unicode homoglyph bypass**: Cyrillic lookalikes (І, о, е, і) bypass regex detection. This is a known limitation of regex-based detection. The ML layer (CharCNN-BiLSTM with unicode normalization) is designed to catch these when enabled.
 
@@ -238,7 +238,7 @@ The AegisGate Scanner was subjected to a comprehensive testing program covering 
 
 | Category | Grade | Notes |
 |----------|-------|-------|
-| ReDoS Resistance | A | 276 patterns, 0 vulnerable |
+| ReDoS Resistance | A | 268 patterns, 0 vulnerable |
 | Archive Security | A | Path traversal, zip bombs, symlinks all blocked |
 | Input Handling | A | Null bytes, control chars, invalid UTF-8 all safe |
 | Output Safety | A | HTML escaped, JSON valid, no injection |

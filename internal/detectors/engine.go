@@ -368,8 +368,6 @@ func getMergedCategory(category string) *mergedCategory {
 		patterns = CompiledDangerousFunctionPatterns
 	case "ot-protocols":
 		patterns = CompiledOTProtocolPatterns
-	case "technical-debt":
-		patterns = CompiledTodoPatterns
 	default:
 		return nil
 	}
@@ -515,7 +513,6 @@ func detectAllByLines(text string, lang Language) []Match {
 	allPatterns = append(allPatterns, CompiledCompliancePatterns...)
 	allPatterns = append(allPatterns, CompiledDangerousFunctionPatterns...)
 	allPatterns = append(allPatterns, CompiledOTProtocolPatterns...)
-	allPatterns = append(allPatterns, CompiledTodoPatterns...)
 	allPatterns = append(allPatterns, customSnapshot...)
 
 	// Apply language filtering once.
@@ -707,7 +704,7 @@ func DetectAllWithLanguage(text string, lang Language) []Match {
 	}
 
 	// For large text, use line-by-line scanning with keyword pre-filtering.
-	// All 276 patterns are single-line (no (?s) dotall, no \n), so this is
+	// All 268 patterns are single-line (no (?s) dotall, no \n), so this is
 	// a lossless optimization that dramatically reduces regex calls.
 	if len(text) >= lineScanThreshold {
 		return detectAllByLines(text, lang)
@@ -743,7 +740,6 @@ func DetectAllWithLanguage(text string, lang Language) []Match {
 		func() []Match {
 			return detectWithPatternsFiltered(text, CompiledOTProtocolPatterns, "ot-protocols", lang)
 		},
-		func() []Match { return detectWithPatternsFiltered(text, CompiledTodoPatterns, "technical-debt", lang) },
 	}
 	if len(customSnapshot) > 0 {
 		scanners = append(scanners, func() []Match {
@@ -801,7 +797,6 @@ func DetectAllWithResults(text string) ([]Match, []DetectionResult) {
 		{CompiledCompliancePatterns, CategoryCompliance},
 		{CompiledDangerousFunctionPatterns, CategoryDangerousFunction},
 		{CompiledOTProtocolPatterns, CategoryOT},
-		{CompiledTodoPatterns, CategoryTodo},
 	}
 
 	results := make([]DetectionResult, len(categories))
@@ -974,7 +969,6 @@ func AllPatternDefs() []PatternDef {
 		CompliancePatterns,
 		DangerousFunctionPatterns,
 		OTProtocolPatterns,
-		TodoPatterns,
 	)
 }
 

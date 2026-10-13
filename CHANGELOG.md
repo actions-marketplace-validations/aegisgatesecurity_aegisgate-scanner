@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Regex merging for performance** — patterns within small categories
   merged into single alternation regex for one-pass scanning. Reduces
-  regex calls from 276 to ~10 for categories under 3000-char threshold.
+  regex calls from 268 to ~9 for categories under 3000-char threshold.
   Large categories (compliance, secrets) fall back to sequential scanning.
   Transparent to callers — `detectWithMerged()` used automatically.
 
@@ -55,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Line-by-line keyword pre-filtering** — for files > 64KB, text is split
   into lines and processed in parallel. Each regex pattern has literal
   keywords extracted at compile time. Only patterns whose keywords appear
-  on a given line are run against that line. 222 of 276 patterns have
+  on a given line are run against that line. 214 of 268 patterns have
   keywords; the remaining 54 (mostly PII patterns) scan full text in
   parallel. All patterns are single-line (no `(?s)` dotall) — lossless.
   Result: 12x faster scanning on 10MB files (227s → 18.3s).
@@ -96,6 +96,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   AST-level dataflow analysis. Recommends Semgrep/CodeQL as complementary
   tools for code-level taint tracking.
 
+### Removed — v0.3.0
+
+- **Technical Debt marker detection** — removed `technical-debt` category
+  (8 patterns: BUG, FIXME, HACK, XXX, TODO, NOTE, security-flagged,
+  not-implemented). These are code-quality linting patterns, not security
+  detection. Pattern count: 276 → 268. Categories: 10 → 9.
+
 ### Added — Solo Maintainer ROI Features (v0.2.0-dev)
 - **JSONL output format** (`--format jsonl`) — NDJSON with one finding per line
   plus a summary line. Ideal for piping to jq, Splunk, ELK, Datadog.
@@ -110,9 +117,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   config status, detection pattern counts, scan results with severity/category
   breakdown, and operational verdict. Use cases: post-install verification,
   conference demos, CI smoke tests.
-- **TODO/FIXME detector** — 8 new patterns (BUG, FIXME, HACK, XXX, TODO, NOTE,
+- **TODO/FIXME detector** — 8 patterns (BUG, FIXME, HACK, XXX, TODO, NOTE,
   security-flagged markers, not-implemented markers). New `technical-debt`
-  category. Total patterns: 276 (up from 268).
+  category. *(Removed in v0.3.0 — not a security detection category.)* Total
+  patterns at v0.2.0: 276.
 - **Makefile** — standard build targets: build, build-lite, build-ml, test,
   test-race, test-cover, cover, lint, vet, fmt, clean, install, release-snapshot.
 - **Install script** (`install.sh`) — curl-based installer with OS/arch

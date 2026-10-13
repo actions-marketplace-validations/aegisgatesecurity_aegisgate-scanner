@@ -77,7 +77,7 @@ flowchart TB
 
         subgraph Detection["Detection Engine"]
             direction LR
-            RegexDet["Regex Detector\n276 patterns"]
+            RegexDet["Regex Detector\n268 patterns"]
             MLDet["ML Detector\nCharCNN-BiLSTM (ONNX)"]
         end
 
@@ -159,7 +159,7 @@ These are the threats Scanner is designed to detect in target artifacts.
 
 | ID | Threat | STRIDE | OWASP LLM | Severity | Detection |
 |----|--------|--------|-----------|----------|-----------|
-| S-001 | **Prompt injection in text artifacts** — adversarial instructions embedded in RAG docs or training data | Tampering | LLM01 | High | Regex detector (276 patterns) + ML detector (CharCNN-BiLSTM ONNX inference) |
+| S-001 | **Prompt injection in text artifacts** — adversarial instructions embedded in RAG docs or training data | Tampering | LLM01 | High | Regex detector (268 patterns) + ML detector (CharCNN-BiLSTM ONNX inference) |
 | S-002 | **Secrets in source/config files** — API keys, tokens, cloud credentials committed to repositories | Info Disclosure | LLM06 | Critical | Regex detector: 64 credential patterns (AWS, GCP, Azure, GitHub, Slack, etc.) |
 | S-003 | **PII in training data / RAG docs** — SSNs, phone numbers, email addresses, financial data | Info Disclosure | LLM06 | High | Regex detector: US core, US extended, financial, international PII patterns |
 | S-004 | **Dangerous functions in agent skills** — `eval()`, `exec()`, `os.system()`, `subprocess(shell=True)` in `.py`/`.ts`/`.js` | Elevation of Privilege | LLM02 | Critical | Regex detector: dangerous function pattern set |
@@ -196,10 +196,10 @@ Each in-scope threat and its mitigation within Scanner's architecture:
 | **S-002** | **Regex (64 credential patterns)** for AWS, GCP, Azure, GitHub, Slack, Stripe, DB strings, private keys, JWTs. **Matched text truncated to 200 chars** to avoid reproducing full secrets in reports. OWASP: LLM06. |
 | **S-003** | **Multi-jurisdiction PII regex:** US core (SSN, phone, email), US extended (license, passport), financial (cards, bank accounts), international (GDPR EU patterns). OWASP: LLM06. |
 | **S-004** | **Dangerous function regex** for Python (`eval`, `exec`, `os.system`, `subprocess(shell=True)`), TS/JS (`eval`, `child_process`, `Function()`). Scoped to `agent-skill` class files only to reduce false positives. OWASP: LLM02. |
-| **S-005** | **35 compliance patterns** for GDPR, HIPAA, PCI-DSS indicators. **SARIF export** for compliance dashboards and audit pipelines. |
+| **S-005** | **47 compliance patterns + 17 prompt injection = 64 total** for GDPR, HIPAA, PCI-DSS indicators. **SARIF export** for compliance dashboards and audit pipelines. |
 | **S-006** | **12 XSS patterns** for `<script>` tags, event handlers, `javascript:` URIs. **HTML output escaping** — all finding content is HTML-escaped to prevent injection in generated reports. |
 | **S-007** | **Decompression bomb caps:** `MaxExtractionSize` (100 MB), `MaxExtractedFiles` (10,000). **Path traversal:** `filepath.Clean()` + root-bound check; `../` entries rejected. **Symlinks:** symbolic links within archives are skipped entirely. |
-| **S-008** | **10 OT/ICS patterns** detecting Modbus, DNP3, OPC-UA, S7comm, and other industrial protocol references in configuration files. |
+| **S-008** | **9 OT/ICS patterns** detecting Modbus, DNP3, OPC-UA, S7comm, and other industrial protocol references in configuration files. |
 
 ---
 

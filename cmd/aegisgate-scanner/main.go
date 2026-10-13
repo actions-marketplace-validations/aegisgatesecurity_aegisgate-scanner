@@ -931,13 +931,12 @@ func runDoctor(args []string) int {
 	fmt.Printf("  compliance:          %d\n", len(detectors.CompliancePatterns))
 	fmt.Printf("  xss:                 %d\n", len(detectors.XSSPatterns))
 	fmt.Printf("  ot-protocols:        %d\n", len(detectors.OTProtocolPatterns))
-	fmt.Printf("  technical-debt:      %d\n", len(detectors.TodoPatterns))
 
 	totalPatterns := len(detectors.SecretsPatterns) + len(detectors.PIIUSCorePatterns) +
 		len(detectors.PIIUSExtendedPatterns) + len(detectors.PIIFinancialPatterns) +
 		len(detectors.PIIInternationalPatterns) + len(detectors.DangerousFunctionPatterns) +
 		len(detectors.CompliancePatterns) + len(detectors.XSSPatterns) +
-		len(detectors.OTProtocolPatterns) + len(detectors.TodoPatterns)
+		len(detectors.OTProtocolPatterns)
 	fmt.Printf("  total:               %d\n", totalPatterns)
 	fmt.Println()
 

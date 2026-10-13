@@ -31,18 +31,18 @@ Your input directly shapes our default extension list and ignore patterns. Drop 
 
 **Body:**
 
-Scanner currently has 257 detection patterns across 10 categories:
+Scanner currently has 268 detection patterns across 9 categories:
 
 | Category | Count |
 |----------|-------|
-| Prompt Injection | 12 |
-| Secrets | 65 |
+| Prompt Injection | 17 |
+| Secrets | 64 |
 | PII (US Core) | 32 |
 | PII (US Extended) | 13 |
 | PII (Financial) | 16 |
 | PII (International) | 24 |
 | XSS | 12 |
-| Compliance | 35 |
+| Compliance | 47 |
 | Dangerous Functions | 34 |
 | OT/ICS Protocols | 9 |
 

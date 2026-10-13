@@ -35,9 +35,9 @@ The present disclosure describes systems and methods for static analysis of AI a
 
 In one embodiment, the artifact classification module classifies files into at least five categories: RAG documents (Markdown, HTML, RST, text), training data (JSONL, CSV, TSV), model configurations (YAML, JSON, TOML, XML), agent skills (Python, JavaScript, TypeScript), and generic files, wherein the classification determines which detection categories are applied.
 
-In another embodiment, the detection engine applies a multi-layered detection pipeline comprising: a first layer of pattern matching using at least 276 regular expression patterns organized into 10 detection categories specific to AI artifact threats; and a second layer of machine learning classification using a character-level convolutional neural network with bidirectional long short-term memory (CharCNN-BiLSTM) for adversarial prompt injection detection.
+In another embodiment, the detection engine applies a multi-layered detection pipeline comprising: a first layer of pattern matching using at least 268 regular expression patterns organized into 9 detection categories specific to AI artifact threats; and a second layer of machine learning classification using a character-level convolutional neural network with bidirectional long short-term memory (CharCNN-BiLSTM) for adversarial prompt injection detection.
 
-In another embodiment, the 10 detection categories include: (1) prompt injection patterns including direct injection, role-play attacks, delimiter injection, SSTI probes, and base64-encoded payloads; (2) secret and credential patterns for at least 20 cloud providers and services; (3) personally identifiable information patterns for US core identifiers, US extended identifiers, financial identifiers, and international identifiers covering at least 6 jurisdictions; (4) cross-site scripting patterns; (5) compliance violation patterns mapped to HIPAA, GDPR, EU AI Act, COPPA, CCPA, and other regulatory frameworks; (6) dangerous function patterns for Python, JavaScript, and shell execution contexts; (7) operational technology and industrial control system protocol patterns including Modbus, S7comm, DNP3, BACnet, EtherCAT, OPC UA, and Profinet; and (8) custom user-defined patterns.
+In another embodiment, the 9 detection categories include: (1) prompt injection patterns including direct injection, role-play attacks, delimiter injection, SSTI probes, and base64-encoded payloads; (2) secret and credential patterns for at least 20 cloud providers and services; (3) personally identifiable information patterns for US core identifiers, US extended identifiers, financial identifiers, and international identifiers covering at least 6 jurisdictions; (4) cross-site scripting patterns; (5) compliance violation patterns mapped to HIPAA, GDPR, EU AI Act, COPPA, CCPA, and other regulatory frameworks; (6) dangerous function patterns for Python, JavaScript, and shell execution contexts; (7) operational technology and industrial control system protocol patterns including Modbus, S7comm, DNP3, BACnet, EtherCAT, OPC UA, and Profinet; and (8) custom user-defined patterns.
 
 In another embodiment, the pattern matching layer operates by scanning each artifact using a dual-mode approach: for artifacts smaller than a size threshold (65,536 bytes), scanning the full content with all compiled patterns concurrently utilizing goroutine-based parallelism across detection categories; and for artifacts at or above said threshold, splitting the content into lines and pre-filtering each line against literal keywords extracted from each pattern at compile time, such that only patterns whose keywords appear on a given line are executed against that line, significantly reducing the number of regex evaluations for large artifacts. Byte offsets of detected matches are mapped to line and column numbers for precise location reporting using a binary search through a pre-computed array of newline positions, achieving O(log n) lookup performance per match.
 
@@ -95,7 +95,7 @@ The archive extraction module identifies archive files by extension (.zip, .tar.
 
 The content detection module applies two detection layers to each artifact's content:
 
-Layer 1 — Pattern Matching: The system maintains 276 pre-compiled regular expression patterns organized into 10 detection categories. Patterns are compiled at initialization time using the Go regexp package's Compile method, which produces efficient DFA-based matchers. The DetectAll function applies all pattern categories to the content. For content exceeding a size threshold (65,536 bytes), categories are scanned concurrently using goroutines, with results merged and sorted by byte offset. For smaller content, categories are scanned sequentially to avoid goroutine overhead.
+Layer 1 — Pattern Matching: The system maintains 268 pre-compiled regular expression patterns organized into 9 detection categories. Patterns are compiled at initialization time using the Go regexp package's Compile method, which produces efficient DFA-based matchers. The DetectAll function applies all pattern categories to the content. For content exceeding a size threshold (65,536 bytes), categories are scanned concurrently using goroutines, with results merged and sorted by byte offset. For smaller content, categories are scanned sequentially to avoid goroutine overhead.
 
 Each pattern match produces a Match struct containing: the matched text value, byte offset, end offset, category, severity level (critical, high, medium, low), confidence score, and rule identifier. Byte offsets are converted to line and column numbers using the byteOffsetToLineCol function, which performs a binary search through a pre-computed line-start offset array for O(log n) performance.
 
@@ -161,12 +161,12 @@ The system is packaged as a GitHub Action with a Docker-based entrypoint. The ac
 
 2. Detection Categories
 
-The 257 detection patterns are organized into 10 categories:
+The 268 detection patterns are organized into 9 categories:
 
-2.1 Prompt Injection (12 patterns)
+2.1 Prompt Injection (17 patterns)
 Detects direct prompt injection ("Ignore all previous instructions"), role-play attacks ("pretend you are DAN"), delimiter injection, SSTI probes, base64-encoded payloads, code execution directives, command injection in prompts, and leakage requests. Maps to OWASP LLM01 and CWE-77.
 
-2.2 Secrets (65 patterns)
+2.2 Secrets (64 patterns)
 Detects API keys for AWS, GCP, Azure, GitHub, GitLab, Slack, Stripe, Twilio, SendGrid, Mailgun, Discord, OpenAI, Anthropic, and other services. Also detects private keys (PEM), database connection strings (PostgreSQL, MySQL, Redis), JWT tokens, bearer tokens, and OpenSSH private keys. Maps to CWE-798.
 
 2.3 PII — US Core (32 patterns)
@@ -184,7 +184,7 @@ Detects PII for UK (NHS), Canada (SIN), Germany (Steuer), France (INSEE), Austra
 2.7 XSS (12 patterns)
 Detects script injection, event handler injection, encoded payloads, and SVG vectors. Maps to CWE-79.
 
-2.8 Compliance (35 patterns)
+2.8 Compliance (47 patterns + 17 prompt injection = 64 total)
 Detects HIPAA, GDPR, EU AI Act, COPPA, CCPA, LGPD, PIPEDA, and POPIA compliance violations. Includes references to specific regulatory articles.
 
 2.9 Dangerous Functions (34 patterns)
@@ -197,9 +197,9 @@ Detects Modbus, S7comm, DNP3, BACnet, EtherCAT, OPC UA, and Profinet protocol re
 
 The detection engine is optimized for large-file scanning through two techniques:
 
-1. Full-content scanning: Rather than scanning each line individually (O(lines × patterns)), the engine scans the full content once per pattern category (O(categories)), mapping match byte offsets to line/column positions post-hoc using binary search. This reduces regex executions from 20,001 × 257 to 10 for a 1MB file with 20,000 lines.
+1. Full-content scanning: Rather than scanning each line individually (O(lines × patterns)), the engine scans the full content once per pattern category (O(categories)), mapping match byte offsets to line/column positions post-hoc using binary search. This reduces regex executions from 20,001 × 268 to 9 for a 1MB file with 20,000 lines.
 
-2. Concurrent category scanning: For content exceeding 8,192 bytes, the 10 detection categories are scanned concurrently using goroutines, providing up to a 3x speedup on multi-core systems. For smaller content, categories are scanned sequentially to avoid goroutine overhead.
+2. Concurrent category scanning: For content exceeding 65,536 bytes, the 9 detection categories are scanned concurrently using goroutines, providing up to a 3x speedup on multi-core systems. For smaller content, categories are scanned sequentially to avoid goroutine overhead.
 
 4. Embodiments
 
@@ -257,4 +257,4 @@ CLAIMS (OUTLINE)
 
 ABSTRACT
 
-A system and method for static analysis of artificial intelligence artifacts — including RAG documents, training datasets, model configurations, and agent skill definitions — to detect security threats including prompt injection, sensitive data exposure, dangerous code, compliance violations, and operational technology protocol exposure. The system applies 276 regular expression patterns across 10 AI-specific detection categories, optionally supplemented by a CharCNN-BiLSTM neural network for adversarial prompt injection detection. The system extracts and scans compressed archives with decompression bomb and path traversal protection, generates remediation guidance for each finding, and outputs results in eight formats including SARIF for CI/CD integration and SPDX software bill of materials. The system is implemented in Go with zero external dependencies and operates in heuristic-only or ML-enabled modes.
+A system and method for static analysis of artificial intelligence artifacts — including RAG documents, training datasets, model configurations, and agent skill definitions — to detect security threats including prompt injection, sensitive data exposure, dangerous code, compliance violations, and operational technology protocol exposure. The system applies 268 regular expression patterns across 9 AI-specific detection categories, optionally supplemented by a CharCNN-BiLSTM neural network for adversarial prompt injection detection. The system extracts and scans compressed archives with decompression bomb and path traversal protection, generates remediation guidance for each finding, and outputs results in eight formats including SARIF for CI/CD integration and SPDX software bill of materials. The system is implemented in Go with zero external dependencies and operates in heuristic-only or ML-enabled modes.

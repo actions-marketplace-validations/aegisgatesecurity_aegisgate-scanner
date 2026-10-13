@@ -127,7 +127,7 @@ func TestCache_SeverityFilterDoesNotInvalidate(t *testing.T) {
 	header := ComputeCacheHeader("test", false)
 	c, _ := cache.Load("", header)
 
-	content := "AKIAIOSFODNN7EXAMPLE\nThis has a secret and a TODO: fix this later\n"
+	content := "AKIAIOSFODNN7EXAMPLE\nThis has a secret and a SSN: 123-45-6789\n"
 	art := artifacts.Artifact{Path: "test.txt", Content: content, Class: artifacts.ClassGeneric}
 
 	// First scan — no severity filter (see all findings).
@@ -166,17 +166,17 @@ func TestCache_DisableRulesDoesNotInvalidate(t *testing.T) {
 	header := ComputeCacheHeader("test", false)
 	c, _ := cache.Load("", header)
 
-	content := "AKIAIOSFODNN7EXAMPLE\nTODO: fix this\n"
+	content := "AKIAIOSFODNN7EXAMPLE\nmy API key is sk-1234567890abcdef\n"
 	art := artifacts.Artifact{Path: "test.txt", Content: content, Class: artifacts.ClassGeneric}
 
 	// First scan — all rules.
 	opts1 := ScanOptions{Cache: c}
 	findings1 := sc.ScanArtifact(art, opts1)
 
-	// Second scan — disable todo rules. Should be a cache hit.
+	// Second scan — disable secret rules. Should be a cache hit.
 	opts2 := ScanOptions{
 		Cache:        c,
-		DisableRules: []string{"todo_todo", "todo_fixme"},
+		DisableRules: []string{"secret_aws_key"},
 	}
 	findings2 := sc.ScanArtifact(art, opts2)
 
