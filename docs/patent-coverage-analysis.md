@@ -13,6 +13,7 @@
 | 64/153,575 | Sep 12, 2026 | Compliance Mapping — mapping AI detections to 31+ compliance framework controls |
 | 64/153,576 | Sep 12, 2026 | Three-Layer Detection Pipeline — regex then ATLAS/compliance then CharCNN-BiLSTM |
 | 64/153,577 | Sep 12, 2026 | Response Scanning — scanning AI model outputs for PII, secrets, hallucinations, toxicity |
+| 64/174,824 | Oct 12, 2026 | **THIS APPLICATION** — Static Analysis of AI Training Artifacts for Security Threats |
 
 ## Scanner (6th Application) — Novel Aspects
 
@@ -43,8 +44,8 @@ Scanner is not yet public (pre-release, patent filing in progress).
 
 ## Recommended Actions
 
-1. **File provisional patent #6** — `docs/provisional-patent-06-ai-artifact-static-analysis.md` is drafted, reviewed, and ready. $65 micro entity fee via USPTO.
-2. **File BEFORE pushing to GitHub** — public disclosure starts the clock.
+1. **File provisional patent #6** — ✅ FILED October 12, 2026. App. No. 64/174,824. Confirmation #9820. $65 micro entity fee paid.
+2. **File BEFORE pushing to GitHub** — ✅ Patent filed. Clear to push to GitHub.
 3. **Document invention dates** — Git commits serve as evidence of conception and reduction to practice
-4. **Non-provisional deadline:** September 12, 2027 (for all 6 provisionals)
-5. **Do not publish detailed technical papers** about Scanner's novel detection method until patent is filed
+4. **Non-provisional deadline:** September 12, 2027 (for provisionals 1-5), October 12, 2027 (for provisional 6)
+5. **Do not publish detailed technical papers** about Scanner's novel detection method — patent now filed, safe to publish

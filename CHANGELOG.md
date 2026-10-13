@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Patent Filed — October 12, 2026
+
+- **US Provisional Patent Application No. 64/174,824** filed with USPTO.
+  Title: "Systems and Methods for Static Analysis of Artificial Intelligence
+  Training Artifacts for Security Threats." Inventor: Joshua Colvin. Micro
+  Entity. Confirmation #9820. Patent Center #83060298. $65 filing fee.
+  Claims priority to 64/153,573–64/153,577 (filed Sep 12, 2026).
+  Non-provisional deadline: October 12, 2027.
+
 ### Added — v0.3.0: Detection Depth + Performance Sprint
 
 - **Entropy-based secret detection** — Shannon entropy analysis catches

@@ -3,7 +3,7 @@
 ## Synthetic Debate — "Are We Bulletproof?"
 
 **Date**: October 12, 2026  
-**Purpose**: Before declaring "done" and filing provisional patent 06, verify the Scanner is as close to bulletproof as possible through adversarial peer review.  
+**Purpose**: Before declaring "done" and filing provisional patent 06 (now filed as 64/174,824), verify the Scanner is as close to bulletproof as possible through adversarial peer review.  
 **Format**: Council-of-Mine — 6 personas representing target audiences debate what's rock-solid vs. what's missing or could be enhanced.
 
 ---
@@ -397,13 +397,13 @@ These don't match the existing "ignore all previous instructions" pattern family
 
 ### Consensus
 
-> **The AegisGate Scanner v0.1.0 is ready for provisional patent filing.**
+> **The AegisGate Scanner v0.3.0 is ready for provisional patent filing.** ✅ FILED — App. No. 64/174,824, October 12, 2026.
 > 
 > Two P0 items (`.env` and `.ipynb` support) should be fixed before public GitHub release but do not block patent filing. Five P1 items should be addressed before public release for maximum credibility. Eight P2 items form the v0.2.0 roadmap.
 >
 > The patent application (258 lines, 10 claims) is sufficient for a provisional filing and establishes priority over the novel aspects: artifact classification for AI-specific file types, dual-layer regex + neural detection, archive extraction with bomb/traversal protection in AI artifact context, and concurrent category-based scanning.
 >
-> **Recommendation: File the provisional patent now. Fix the 2 P0s. Address the 5 P1s. Then push to GitHub with the v0.1.0 tag.**
+> **Recommendation: File the provisional patent now. ✅ DONE — 64/174,824 filed Oct 12, 2026. Fix the 2 P0s. Address the 5 P1s. Then push to GitHub with the v0.3.0 tag.**
 
 ---
 

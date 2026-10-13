@@ -4,8 +4,12 @@ Title: SYSTEMS AND METHODS FOR STATIC ANALYSIS OF ARTIFICIAL INTELLIGENCE TRAINI
 
 Inventor: Joshua Colvin
 Entity Status: Micro Entity (under 37 CFR 1.29)
+Application No.: 64/174,824
+Confirmation No.: 9820
+Patent Center No.: 83060298
 Related Applications: This application claims priority to and is related to U.S. Provisional Application Nos. 64/153,573; 64/153,574; 64/153,575; 64/153,576; and 64/153,577, all filed September 12, 2026.
 Filing Date: October 12, 2026
+Filed By: Joshua Colvin
 
 TECHNICAL FIELD
 
