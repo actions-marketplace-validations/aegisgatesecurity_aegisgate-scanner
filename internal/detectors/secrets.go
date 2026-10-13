@@ -43,7 +43,7 @@ var SecretsPatterns = []PatternDef{
 	{
 		Name:        "secret_private_key_pem",
 		Severity:    SeverityCritical,
-		Regex:       `-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----`,
+		Regex:       `-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----`, //nosec G101 -- regex pattern for detecting private keys, not an actual key
 		Description: "PEM private key header",
 	},
 	{

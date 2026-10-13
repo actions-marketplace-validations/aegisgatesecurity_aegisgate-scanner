@@ -83,7 +83,7 @@ var ruleRemediation = map[string]string{
 	"secret_aws_key":                                      "Remove the AWS access key ID from the artifact. Rotate the key in AWS IAM Console immediately. Use IAM roles or AWS Secrets Manager instead.",
 	"secret_github_token":                                 "Remove the GitHub token from the artifact. Revoke it at https://github.com/settings/tokens immediately. Use GITHUB_TOKEN in Actions or a secrets manager.",
 	"secret_openai_key":                                   "Remove the OpenAI API key from the artifact. Rotate it at https://platform.openai.com/api-keys immediately. Use environment variables or a secrets manager.",
-	"secret_private_key_pem":                              "Remove the private key from the artifact. Generate a new key pair and revoke the compromised key. Never commit private keys to repositories.",
+	"secret_private_key_pem":                              "Remove the private key from the artifact. Generate a new key pair and revoke the compromised key. Never commit private keys to repositories.", //nosec G101 -- remediation text, not an actual key
 	"secret_postgresql_connection_string":                 "Remove the database connection string from the artifact. Use environment variables or a secrets manager. Rotate the database password.",
 	"owasp_llm01_prompt_injection":                        "Prompt injection detected. This content could manipulate LLM behavior when used in RAG context. Remove the injection payload or implement input sanitization.",
 	"owasp_llm06_sensitive_info_disclosure_system_prompt": "System prompt disclosure detected. Remove the system prompt from the artifact. Ensure system prompts are not included in training or RAG data.",

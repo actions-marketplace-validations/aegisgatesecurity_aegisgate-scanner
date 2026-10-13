@@ -179,7 +179,7 @@ func extractZip(zipPath, destDir string) ([]string, error) {
 		}
 
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(destPath, 0755); err != nil {
+			if err := os.MkdirAll(destPath, 0750); err != nil { //nosec G301 -- extracted archive directory
 				return nil, fmt.Errorf("create dir %s: %w", destPath, err)
 			}
 			continue
@@ -195,7 +195,7 @@ func extractZip(zipPath, destDir string) ([]string, error) {
 		}
 
 		// Ensure parent directory exists.
-		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(destPath), 0750); err != nil { //nosec G301 -- parent dir for extracted file
 			return nil, fmt.Errorf("create parent dir: %w", err)
 		}
 
@@ -206,7 +206,7 @@ func extractZip(zipPath, destDir string) ([]string, error) {
 		}
 
 		// Write file with size limit enforcement.
-		outFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		outFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0640) //nosec G302 -- extracted archive file
 		if err != nil {
 			rc.Close()
 			return nil, fmt.Errorf("create file %s: %w", destPath, err)
@@ -303,7 +303,7 @@ func extractTar(r io.Reader, destDir string) ([]string, error) {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(destPath, 0755); err != nil {
+			if err := os.MkdirAll(destPath, 0750); err != nil { //nosec G301 -- extracted archive directory
 				return nil, fmt.Errorf("create dir %s: %w", destPath, err)
 			}
 		case tar.TypeReg:
@@ -316,11 +316,11 @@ func extractTar(r io.Reader, destDir string) ([]string, error) {
 				return nil, fmt.Errorf("archive bomb: total extracted size would exceed max %d", MaxExtractionSize)
 			}
 
-			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(destPath), 0750); err != nil { //nosec G301 -- parent dir for extracted file
 				return nil, fmt.Errorf("create parent dir: %w", err)
 			}
 
-			outFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+			outFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0640) //nosec G302 -- extracted archive file
 			if err != nil {
 				return nil, fmt.Errorf("create file %s: %w", destPath, err)
 			}

@@ -11,7 +11,7 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://golang.org/)
-[![Version](https://img.shields.io/badge/Version-0.1.0-blue.svg)](#changelog)
+[![Version](https://img.shields.io/badge/Version-0.3.0-blue.svg)](#changelog)
 [![Coverage](https://img.shields.io/badge/Coverage-90%25+-brightgreen.svg)](#testing)
 [![CI](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/ci.yml)
 [![E2E](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/e2e.yml/badge.svg)](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/e2e.yml)

@@ -53,7 +53,7 @@ func GetChangedFiles(baseBranch, repoRoot string) ([]string, error) {
 	}
 
 	// Run git diff --name-only base_branch...HEAD
-	cmd := exec.Command(gitPath, "diff", "--name-only", baseBranch+"...HEAD")
+	cmd := exec.Command(gitPath, "diff", "--name-only", baseBranch+"...HEAD") //nosec G204 -- intentional git subprocess for diff scanning
 	cmd.Dir = repoRoot
 
 	var stdout, stderr bytes.Buffer

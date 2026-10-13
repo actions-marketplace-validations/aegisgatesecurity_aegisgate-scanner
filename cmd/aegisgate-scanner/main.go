@@ -678,7 +678,7 @@ Examples:
 	}
 
 	if outputFile != "" {
-		if err := os.WriteFile(outputFile, outBuf, 0644); err != nil {
+		if err := os.WriteFile(outputFile, outBuf, 0600); err != nil { //nosec G306 -- output file may contain sensitive findings
 			slog.Error("failed to write output", "file", outputFile, "error", err)
 			return exitError
 		}
@@ -716,7 +716,7 @@ func runInit(args []string) int {
 	configPath := filepath.Join(dir, ".aegisgate.yml")
 
 	// Create directory if it doesn't exist.
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil { //nosec G301 -- config directory for scanner
 		slog.Error("cannot create directory", "dir", dir, "error", err)
 		return exitError
 	}
@@ -776,7 +776,7 @@ log_level: info
 log_format: text
 `
 
-	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil { //nosec G306 -- config file may contain security settings
 		slog.Error("cannot write config file", "path", configPath, "error", err)
 		return exitError
 	}
@@ -1251,7 +1251,7 @@ func outputResults(result *scanner.ScanResult, root string, cfg *config.Config, 
 	case "text":
 		text := output.FormatText(result, root, Version, cfg.ColorOutput)
 		if opts.output != "" {
-			return os.WriteFile(opts.output, []byte(text), 0644)
+			return os.WriteFile(opts.output, []byte(text), 0600) //nosec G306 -- output may contain sensitive findings
 		}
 		if !opts.quiet {
 			fmt.Print(text)
@@ -1264,7 +1264,7 @@ func outputResults(result *scanner.ScanResult, root string, cfg *config.Config, 
 
 	// Write to file or stdout for binary formats.
 	if opts.output != "" {
-		return os.WriteFile(opts.output, data, 0644)
+		return os.WriteFile(opts.output, data, 0600) //nosec G306 -- output may contain sensitive findings
 	}
 
 	// For SARIF/JSON, always output to stdout (these are machine-readable).

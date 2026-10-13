@@ -220,7 +220,7 @@ func fetchRelease(opts UpdateOptions) (*githubRelease, error) {
 			opts.GitHubAPIURL, opts.Repo)
 	}
 
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) //nosec G107 -- intentional URL fetch for self-update mechanism
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request: %w", err)
 	}
@@ -275,7 +275,7 @@ func findAssetForPlatform(release *githubRelease, goos, goarch string) (*githubA
 
 // downloadAsset downloads a release asset to a temporary file.
 func downloadAsset(asset *githubAsset) (string, error) {
-	resp, err := http.Get(asset.BrowserDownloadURL)
+	resp, err := http.Get(asset.BrowserDownloadURL) //nosec G107 -- intentional download from GitHub releases
 	if err != nil {
 		return "", fmt.Errorf("download: %w", err)
 	}
@@ -317,7 +317,7 @@ func verifyChecksum(filePath string, release *githubRelease, asset *githubAsset)
 		if strings.Contains(lower, "checksum") || strings.Contains(lower, "sha256") ||
 			strings.HasSuffix(lower, ".sha256") || strings.HasSuffix(lower, ".sha256sum") {
 			// Download and parse the checksums file.
-			resp, err := http.Get(a.BrowserDownloadURL)
+			resp, err := http.Get(a.BrowserDownloadURL) //nosec G107 -- intentional checksum download from GitHub releases
 			if err != nil {
 				continue
 			}
@@ -356,7 +356,7 @@ func replaceBinary(downloadedPath string) error {
 	}
 
 	// Make downloaded file executable.
-	if err := os.Chmod(downloadedPath, 0755); err != nil {
+	if err := os.Chmod(downloadedPath, 0755); err != nil { //nosec G302 -- binary must be executable
 		return fmt.Errorf("chmod downloaded file: %w", err)
 	}
 

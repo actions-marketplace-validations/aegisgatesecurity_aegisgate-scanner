@@ -115,7 +115,7 @@ func (b *Baseline) Save(path string) error {
 		return fmt.Errorf("marshal baseline: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil { //nosec G306 -- baseline contains security findings
 		return fmt.Errorf("write baseline file %s: %w", path, err)
 	}
 

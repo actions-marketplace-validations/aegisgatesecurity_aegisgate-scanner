@@ -152,7 +152,7 @@ func ScanHistory(repoRoot string, opts HistoryOptions) (*HistoryResult, error) {
 		args = append(args, "--until="+opts.Until.Format("2006-01-02"))
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", args...) //nosec G204 -- intentional git subprocess for history scanning
 	cmd.Dir = repoRoot
 
 	var stderr bytes.Buffer
