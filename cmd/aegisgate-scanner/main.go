@@ -55,7 +55,7 @@ import (
 // The Makefile passes -ldflags="-X main.Version=$(VERSION)" using the
 // VERSION file. When running via `go run` without ldflags, this default
 // is used. Keep it in sync with the VERSION file.
-var Version = "0.3.0"
+var Version = "0.4.0"
 
 // Exit codes.
 const (

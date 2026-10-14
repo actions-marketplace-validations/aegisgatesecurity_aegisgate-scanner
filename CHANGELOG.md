@@ -5,6 +5,59 @@ All notable changes to AegisGate Scanner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-10-14 - Moat Deepening: RAG Patterns, Prompt Leakage Detection, Pattern Pull, Platform Forward
+
+> **v0.4.0** extends Scanner's detection coverage with 33 new patterns (268→301), adds a pattern pull client for syncing canonical patterns from Platform, and introduces a platform forwarding module for sending scan results to Platform's telemetry receiver. All new features are air-gap compatible — pattern pull and platform forward are opt-in, outbound, config-driven, and fully disabled when `platform_url` is empty.
+
+### Added — RAG Attack Patterns (17 patterns)
+
+- **`pkg/detectors/rag_patterns.go`** — 17 regex patterns detecting RAG-specific attacks:
+  - Vector store injection (instructions to write content into vector stores)
+  - RAG smuggling (prompt injection in document metadata, HTML comments)
+  - Retrieval bypass (instructions to skip retrieval safety checks)
+  - RAG poisoning (conditional instructions triggered by retrieval, embedding manipulation)
+  - Knowledge base data injection (instructions to modify all retrieval results)
+  - Embedding poisoning (explicit instructions to corrupt vector embeddings)
+
+### Added — Prompt Leakage Patterns (16 patterns)
+
+- **`pkg/detectors/prompt_leakage_patterns.go`** — 16 regex patterns detecting system prompt leakage in responses:
+  - `<system>` tag content leaked in responses
+  - Model stating its system prompt content
+  - Meta-instruction references
+  - Internal tool/function list disclosure
+  - Instruction repeats revealing configuration
+  - Raw system prompt config dumps
+
+### Added — Pattern Pull Client
+
+- **`pkg/patternpull/pull.go`** — HTTP client that pulls canonical detection patterns from Platform's telemetry endpoint (`GET /api/v1/patterns/latest`). Uses ETag-based caching (`If-None-Match`) to minimize bandwidth. Air-gap compatible — no-op when `platform_url` is empty. 23 tests covering pull, cache, merge, and error scenarios.
+
+### Added — Platform Forward
+
+- **`pkg/platformforward/`** — Forwards scan results to Platform's telemetry receiver (`POST /api/v1/events`) in canonical `contracts.Event` format. Air-gap compatible — no-op when `platform_url` is empty. 16 tests covering event formatting, batching, retry, and error scenarios.
+
+### Pattern Count
+
+- Total patterns: 268 → 301 (+17 RAG +16 prompt leakage)
+- Categories: 9 → 11 (added RAG and Prompt Leakage)
+- All existing patterns unchanged
+
+### Testing
+
+- 69 new tests across Phase 3-5 packages
+- `pkg/patternpull`: 91.5% coverage
+- `pkg/platformforward`: all tests pass
+- All existing detector tests continue to pass
+
+### Version Bumps
+
+- Scanner VERSION: 0.3.0 → 0.4.0
+- `cmd/aegisgate-scanner/main.go`: version string updated
+- README badges updated to v0.4.0
+
+---
+
 ## [Unreleased]
 
 ### Patent Filed — October 12, 2026

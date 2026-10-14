@@ -7,7 +7,7 @@
 
 *Static analysis that detects prompt injection, PII, secrets, dangerous code, and compliance violations in RAG documents, training data, model configs, and agent skills — before they reach production.*
 
-268 regex patterns + CharCNN-BiLSTM (v13) ML · 8 output formats · SARIF · SBOM · GitHub Action · Dual Docker images · Zero runtime dependencies
+301 regex patterns + CharCNN-BiLSTM (v13) ML · 8 output formats · SARIF · SBOM · GitHub Action · Dual Docker images · Zero runtime dependencies
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go)](https://golang.org/)
@@ -19,7 +19,7 @@
 [![Fuzzed](https://img.shields.io/badge/Fuzzed-✅-purple.svg)](#testing)
 [![Race Detector](https://img.shields.io/badge/Race_Detector-✅-success.svg)](#testing)
 [![Docker](https://img.shields.io/badge/Docker-ML_+_Lite-blue.svg)](#docker)
-[![Patterns](https://img.shields.io/badge/Patterns-268-9cf.svg)](#detection-categories)
+[![Patterns](https://img.shields.io/badge/Patterns-301-9cf.svg)](#detection-categories)
 [![Formats](https://img.shields.io/badge/Output-8_Formats-orange.svg)](#output-formats)
 [![Patent Pending](https://img.shields.io/badge/IP-Patent_Pending-8B5CF6?logo=uspto)](#ip-notice)
 
@@ -33,7 +33,7 @@
 
 ---
 
-> **🛡️ Using AegisGate at work?** [AegisGate Platform](https://github.com/aegisgatesecurity/aegisgate-platform) is our server-side gateway — 223 detection patterns, MCP/A2A/ACP protection, 30+ compliance frameworks, and cryptographic attestation. For individual developers, Scanner runs locally or in your CI/CD pipeline. [Explore Platform →](https://github.com/aegisgatesecurity/aegisgate-platform)
+> **🛡️ Using AegisGate at work?** [AegisGate Platform](https://github.com/aegisgatesecurity/aegisgate-platform) is our server-side gateway — 220+ canonical detection patterns, MCP/A2A/ACP protection, 30+ compliance frameworks, and cryptographic attestation. For individual developers, Scanner runs locally or in your CI/CD pipeline. [Explore Platform →](https://github.com/aegisgatesecurity/aegisgate-platform)
 >
 > **🔐 AegisGate Rampart** — Using AI coding tools (Copilot, Cursor, local LLMs)? [AegisGate Rampart](https://github.com/aegisgatesecurity/aegisgate-rampart) is a free local proxy that intercepts secrets and sensitive data before they leave your machine. [Explore Rampart →](https://github.com/aegisgatesecurity/aegisgate-rampart)
 >
@@ -50,19 +50,21 @@ don't understand AI-specific threats. AegisGate Scanner does.**
 
 | | Semgrep / CodeQL | TruffleHog / Gitleaks | AegisGate Scanner |
 |---|---|---|---|
-| Prompt injection | ❌ | ❌ | ✅ 17 patterns + ML |
+| Prompt injection | ❌ | ❌ | ✅ 30 patterns + ML |
 | Secrets | Partial | ✅ | ✅ 64 patterns |
 | PII (US + International) | ❌ | ❌ | ✅ 85 patterns |
 | Dangerous code (agent skills) | Partial | ❌ | ✅ 34 patterns |
 | Compliance (HIPAA/GDPR/EU AI Act) | ❌ | ❌ | ✅ 64 patterns |
 | OT/ICS protocol exposure | ❌ | ❌ | ✅ 9 patterns |
+| RAG attack detection | ❌ | ❌ | ✅ 17 patterns |
+| Prompt leakage detection | ❌ | ❌ | ✅ 16 patterns |
 | Archive extraction | ❌ | ❌ | ✅ zip/tar.gz/tar.bz2 |
 | SARIF output | ✅ | ❌ | ✅ |
 | ML-based detection | ❌ | ❌ | ✅ CharCNN-BiLSTM |
 | SBOM generation | ❌ | ❌ | ✅ SPDX |
 | Diff/baseline suppression | ❌ | ❌ | ✅ |
 
-**268 detection patterns. 9 categories. 8 output formats. Apache 2.0.**
+**301 detection patterns. 11 categories. 8 output formats. Apache 2.0.**
 
 ---
 
@@ -153,9 +155,31 @@ docker run --rm -v $(pwd):/github/workspace aegisgate-scanner:lite scan /github/
 | **Compliance** | 47 | OWASP LLM Top 10, EU AI Act, MITRE ATLAS, HIPAA, GDPR, COPPA, CCPA, model config safety |
 | **Dangerous Functions** | 34 | `eval()`, `exec()`, `os.system()`, `subprocess`, `pickle.load()`, `child_process.exec()` |
 | **OT/ICS Protocols** | 9 | Modbus, S7comm, DNP3, BACnet, EtherCAT, OPC UA, Profinet |
+| **RAG Attacks** | 17 | Vector store injection, RAG smuggling, retrieval bypass, RAG poisoning, embedding manipulation |
+| **Prompt Leakage** | 16 | System prompt leakage, meta-instruction references, internal tool disclosure, config dumps |
 | **ML (optional)** | 1 model | CharCNN-BiLSTM neural detector for adversarial prompt injection |
 
-**Total: 268 regex patterns + optional ML detection.**
+**Total: 301 regex patterns + optional ML detection.**
+
+## Pattern Pull (Optional)
+
+Scanner can pull canonical detection patterns from AegisGate Platform's telemetry endpoint when configured:
+
+```bash
+aegisgate-scanner --platform-url https://platform.example.com scan ./docs/
+```
+
+When `--platform-url` is not set (default), Scanner uses its built-in 301 patterns with zero network calls. When set, Scanner pulls canonical patterns with ETag caching and merges them with local patterns. Air-gap compatible — fully functional offline.
+
+## Platform Forward (Optional)
+
+Scanner can forward scan results to AegisGate Platform's telemetry receiver when configured:
+
+```bash
+aegisgate-scanner --platform-url https://platform.example.com --forward-events scan ./docs/
+```
+
+Events are sent in canonical contract format. Air-gap compatible — no-op when `--platform-url` is not set.
 
 ## Output Formats
 
@@ -386,7 +410,7 @@ go test -fuzz=FuzzScanArtifact -fuzztime=30s ./pkg/scanner/
 ```
 aegisgate-scanner/
 ├── cmd/aegisgate-scanner/   # CLI entrypoint
-├── internal/detectors/       # Detection engine + 268 patterns
+├── internal/detectors/       # Detection engine + 301 patterns
 ├── internal/ml/              # CharCNN-BiLSTM ML threat detector
 ├── pkg/api/                  # Public API/SDK
 ├── pkg/artifacts/            # File walker, archive extraction
