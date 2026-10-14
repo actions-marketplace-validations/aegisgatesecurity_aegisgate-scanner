@@ -155,7 +155,7 @@ jobs:
           fi
           echo "✅ All packages ≥ 70% coverage"
       - name: Upload coverage
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-lite
           path: coverage-lite.out
@@ -220,7 +220,7 @@ jobs:
           fi
           echo "✅ All packages ≥ 70% coverage"
       - name: Upload coverage
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-ml
           path: coverage-ml.out
