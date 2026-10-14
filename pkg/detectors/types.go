@@ -33,6 +33,8 @@ const (
 	CategoryCompliance        Category = "compliance"
 	CategoryDangerousFunction Category = "dangerous_function"
 	CategoryOT                Category = "ot-protocols"
+	CategoryRAG               Category = "rag"
+	CategoryPromptLeakage     Category = "prompt-leakage"
 )
 
 // Match represents a single regex detection match.
