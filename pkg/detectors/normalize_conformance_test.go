@@ -5,7 +5,7 @@
 // conformance vectors in testkit/normalization-conformance-vectors.json.
 // This ensures Rampart stays in parity with Platform and Lens.
 //
-// Run: go test -v -run TestConformance ./internal/detectors/...
+// Run: go test -v -run TestConformance ./pkg/detectors/...
 
 package detectors
 

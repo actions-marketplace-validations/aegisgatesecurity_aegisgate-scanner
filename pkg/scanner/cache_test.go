@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aegisgatesecurity/aegisgate-scanner/internal/detectors"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/artifacts"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/cache"
+	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/detectors"
 )
 
 func TestCache_BasicHitMiss(t *testing.T) {
