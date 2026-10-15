@@ -811,6 +811,7 @@ func DetectAllWithResults(text string) ([]Match, []DetectionResult) {
 		{CompiledOTProtocolPatterns, CategoryOT},
 		{CompiledRAGPatterns, CategoryRAG},
 		{CompiledPromptLeakagePatterns, CategoryPromptLeakage},
+		{CompiledPathTraversalPatterns, CategoryPathTraversal},
 	}
 
 	results := make([]DetectionResult, len(categories))
