@@ -102,7 +102,7 @@ Create a pull request on GitHub. CI will automatically run:
 
 ## Adding Detection Patterns
 
-New detection patterns go in `internal/detectors/`. Each pattern needs:
+New detection patterns go in `pkg/detectors/`. Each pattern needs:
 
 1. **Pattern definition** with unique `Name`, `Severity`, `Regex`, and `Description`
 2. **Tests** in a corresponding `_test.go` file

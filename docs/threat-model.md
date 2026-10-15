@@ -49,7 +49,7 @@ CLI → Walker → Classifier → Regex Detector → ML Detector → Output Form
 | Walker           | `pkg/artifacts/walker.go`      | Traverse filesystem, respect `.gitignore`, stream file contents |
 | Archive Extract  | `pkg/artifacts/archive.go`     | Decompress `.zip`, `.tar.gz`, `.tar.bz2` into temp dir with size/file limits |
 | Classifier       | `pkg/artifacts/walker.go`      | Classify each file as `rag-document`, `training-data`, `model-config`, `agent-skill`, or `generic` |
-| Regex Detector   | `internal/detectors/engine.go` | Pattern-match secrets, PII, XSS, compliance, dangerous functions, OT/ICS |
+| Regex Detector   | `pkg/detectors/engine.go` | Pattern-match secrets, PII, XSS, compliance, dangerous functions, OT/ICS |
 | ML Detector      | `internal/ml/detector.go`      | CharCNN-BiLSTM inference for prompt injection (ONNX runtime) |
 | Output Formatter | `pkg/output`                   | Emit findings as text, JSON, SARIF, HTML, SBOM, or PR annotation |
 

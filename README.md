@@ -7,11 +7,11 @@
 
 *Static analysis that detects prompt injection, PII, secrets, dangerous code, and compliance violations in RAG documents, training data, model configs, and agent skills — before they reach production.*
 
-301 regex patterns + CharCNN-BiLSTM (v13) ML · 8 output formats · SARIF · SBOM · GitHub Action · Dual Docker images · Zero runtime dependencies
+322 regex patterns + CharCNN-BiLSTM (v13) ML · 8 output formats · SARIF · SBOM · GitHub Action · Dual Docker images · Zero runtime dependencies
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go)](https://golang.org/)
-[![Version](https://img.shields.io/badge/Version-0.3.0-blue.svg)](#changelog)
+[![Version](https://img.shields.io/badge/Version-0.4.0-blue.svg)](#changelog)
 [![Coverage](https://img.shields.io/badge/Coverage-90%25+-brightgreen.svg)](#testing)
 [![CI](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/ci.yml)
 [![E2E](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/e2e.yml/badge.svg)](https://github.com/aegisgatesecurity/aegisgate-scanner/actions/workflows/e2e.yml)
@@ -19,7 +19,7 @@
 [![Fuzzed](https://img.shields.io/badge/Fuzzed-✅-purple.svg)](#testing)
 [![Race Detector](https://img.shields.io/badge/Race_Detector-✅-success.svg)](#testing)
 [![Docker](https://img.shields.io/badge/Docker-ML_+_Lite-blue.svg)](#docker)
-[![Patterns](https://img.shields.io/badge/Patterns-301-9cf.svg)](#detection-categories)
+[![Patterns](https://img.shields.io/badge/Patterns-322-9cf.svg)](#detection-categories)
 [![Formats](https://img.shields.io/badge/Output-8_Formats-orange.svg)](#output-formats)
 [![Patent Pending](https://img.shields.io/badge/IP-Patent_Pending-8B5CF6?logo=uspto)](#ip-notice)
 
@@ -64,7 +64,7 @@ don't understand AI-specific threats. AegisGate Scanner does.**
 | SBOM generation | ❌ | ❌ | ✅ SPDX |
 | Diff/baseline suppression | ❌ | ❌ | ✅ |
 
-**301 detection patterns. 11 categories. 8 output formats. Apache 2.0.**
+**322 detection patterns. 12 categories. 8 output formats. Apache 2.0.**
 
 ---
 
@@ -139,7 +139,7 @@ docker run --rm -v $(pwd):/github/workspace aegisgate-scanner:lite scan /github/
     sarif_file: aegisgate-report.sarif
 ```
 
-> **Pin for reproducibility:** use `@v0.3.0` instead of `@v0` to lock to a specific release.
+> **Pin for reproducibility:** use `@v0.4.0` instead of `@v0` to lock to a specific release.
 
 ## Detection Categories
 
@@ -159,7 +159,7 @@ docker run --rm -v $(pwd):/github/workspace aegisgate-scanner:lite scan /github/
 | **Prompt Leakage** | 16 | System prompt leakage, meta-instruction references, internal tool disclosure, config dumps |
 | **ML (optional)** | 1 model | CharCNN-BiLSTM neural detector for adversarial prompt injection |
 
-**Total: 301 regex patterns + optional ML detection.**
+**Total: 322 regex patterns + optional ML detection.**
 
 ## Pattern Pull (Optional)
 
@@ -169,7 +169,7 @@ Scanner can pull canonical detection patterns from AegisGate Platform's telemetr
 aegisgate-scanner --platform-url https://platform.example.com scan ./docs/
 ```
 
-When `--platform-url` is not set (default), Scanner uses its built-in 301 patterns with zero network calls. When set, Scanner pulls canonical patterns with ETag caching and merges them with local patterns. Air-gap compatible — fully functional offline.
+When `--platform-url` is not set (default), Scanner uses its built-in 322 patterns with zero network calls. When set, Scanner pulls canonical patterns with ETag caching and merges them with local patterns. Air-gap compatible — fully functional offline.
 
 ## Platform Forward (Optional)
 
@@ -367,7 +367,7 @@ All 9 testable packages maintain ≥90% coverage:
 | Package | Coverage |
 |---------|----------|
 | cmd/aegisgate-scanner | 90.9% |
-| internal/detectors | 98.8% |
+| pkg/detectors | 98.8% |
 | pkg/api | 90.5% |
 | pkg/artifacts | 93.4% |
 | pkg/baseline | 90.2% |
@@ -401,7 +401,7 @@ CGO_ENABLED=1 go test -race -skip TestEvasionSuite ./...
 go test -bench=. -benchmem ./pkg/scanner/
 
 # Fuzz tests
-go test -fuzz=FuzzDetectAll -fuzztime=30s ./internal/detectors/
+go test -fuzz=FuzzDetectAll -fuzztime=30s ./pkg/detectors/
 go test -fuzz=FuzzScanArtifact -fuzztime=30s ./pkg/scanner/
 ```
 
@@ -410,7 +410,7 @@ go test -fuzz=FuzzScanArtifact -fuzztime=30s ./pkg/scanner/
 ```
 aegisgate-scanner/
 ├── cmd/aegisgate-scanner/   # CLI entrypoint
-├── internal/detectors/       # Detection engine + 301 patterns
+├── pkg/detectors/            # Detection engine + 322 patterns
 ├── internal/ml/              # CharCNN-BiLSTM ML threat detector
 ├── pkg/api/                  # Public API/SDK
 ├── pkg/artifacts/            # File walker, archive extraction
