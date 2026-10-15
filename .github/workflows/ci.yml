@@ -90,6 +90,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Checkout Platform (for go.mod replace)
+        uses: actions/checkout@v6
+        with:
+          repository: aegisgatesecurity/aegisgate-platform
+          path: ./aegisgate-platform
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update go.mod replace for CI
+        run: go mod edit -replace github.com/aegisgatesecurity/aegisgate-platform=./aegisgate-platform -replace github.com/aegisgatesecurity/aegisgate-scanner=.
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -118,6 +128,16 @@ jobs:
     name: Test (non-CGO / heuristic-only)
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+      - name: Checkout Platform (for go.mod replace)
+        uses: actions/checkout@v6
+        with:
+          repository: aegisgatesecurity/aegisgate-platform
+          path: ./aegisgate-platform
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update go.mod replace for CI
+        run: go mod edit -replace github.com/aegisgatesecurity/aegisgate-platform=./aegisgate-platform -replace github.com/aegisgatesecurity/aegisgate-scanner=.
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
@@ -177,6 +197,16 @@ jobs:
     name: Test (CGO / ML-enabled)
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+      - name: Checkout Platform (for go.mod replace)
+        uses: actions/checkout@v6
+        with:
+          repository: aegisgatesecurity/aegisgate-platform
+          path: ./aegisgate-platform
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update go.mod replace for CI
+        run: go mod edit -replace github.com/aegisgatesecurity/aegisgate-platform=./aegisgate-platform -replace github.com/aegisgatesecurity/aegisgate-scanner=.
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
@@ -243,6 +273,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Checkout Platform (for go.mod replace)
+        uses: actions/checkout@v6
+        with:
+          repository: aegisgatesecurity/aegisgate-platform
+          path: ./aegisgate-platform
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update go.mod replace for CI
+        run: go mod edit -replace github.com/aegisgatesecurity/aegisgate-platform=./aegisgate-platform -replace github.com/aegisgatesecurity/aegisgate-scanner=.
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -273,6 +313,16 @@ jobs:
     name: Benchmark Regression Check
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+      - name: Checkout Platform (for go.mod replace)
+        uses: actions/checkout@v6
+        with:
+          repository: aegisgatesecurity/aegisgate-platform
+          path: ./aegisgate-platform
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update go.mod replace for CI
+        run: go mod edit -replace github.com/aegisgatesecurity/aegisgate-platform=./aegisgate-platform -replace github.com/aegisgatesecurity/aegisgate-scanner=.
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
@@ -314,6 +364,16 @@ jobs:
       matrix:
         cgo: [0, 1]
     steps:
+      - uses: actions/checkout@v7
+      - name: Checkout Platform (for go.mod replace)
+        uses: actions/checkout@v6
+        with:
+          repository: aegisgatesecurity/aegisgate-platform
+          path: ./aegisgate-platform
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update go.mod replace for CI
+        run: go mod edit -replace github.com/aegisgatesecurity/aegisgate-platform=./aegisgate-platform -replace github.com/aegisgatesecurity/aegisgate-scanner=.
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
