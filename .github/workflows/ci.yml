@@ -424,6 +424,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Checkout Platform (for go.mod replace)
+        uses: actions/checkout@v6
+        with:
+          repository: aegisgatesecurity/aegisgate-platform
+          path: ./aegisgate-platform
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update go.mod replace for CI
+        run: go mod edit -replace github.com/aegisgatesecurity/aegisgate-platform=./aegisgate-platform -replace github.com/aegisgatesecurity/aegisgate-scanner=.
+
       - name: Build ML image
         id: docker-ml
         continue-on-error: true
