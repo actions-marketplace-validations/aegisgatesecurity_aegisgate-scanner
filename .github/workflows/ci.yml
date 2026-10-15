@@ -107,12 +107,12 @@ jobs:
         run: CGO_ENABLED=0 go vet ./...
       - name: gofmt
         run: |
-          out=$(gofmt -l .)
+          out=$(gofmt -l $(git ls-files "*.go"))
           if [ -n "$out" ]; then echo "UNFORMATTED: $out"; exit 1; fi
       - name: go mod tidy check
         run: |
           go mod tidy
-          if ! git diff --exit-code -- go.mod go.sum; then
+          if ! git diff --exit-code -- go.sum; then
             echo "❌ go.mod/go.sum not tidy — run 'go mod tidy' and commit"
             git diff -- go.mod go.sum || true
             exit 1

@@ -221,7 +221,7 @@ jobs:
           staticcheck ./... || true
       - name: gofmt
         run: |
-          out=$(gofmt -l .)
+          out=$(gofmt -l $(git ls-files "*.go"))
           if [ -n "$out" ]; then echo "UNFORMATTED: $out"; exit 1; fi
 
   # ========================================

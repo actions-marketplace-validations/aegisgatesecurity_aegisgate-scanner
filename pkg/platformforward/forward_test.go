@@ -6,6 +6,7 @@
 package platformforward
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -358,4 +359,207 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+func TestString_Disabled(t *testing.T) {
+	f := New("")
+	if s := f.String(); s != "platform forwarding disabled" {
+		t.Errorf("expected 'platform forwarding disabled', got %q", s)
+	}
+}
+
+func TestString_Enabled(t *testing.T) {
+	f := New("https://platform.example.com/api/v1/telemetry")
+	if s := f.String(); s != "platform forwarding → https://platform.example.com/..." {
+		t.Errorf("unexpected String output: %q", s)
+	}
+}
+
+func TestFlush_EmptyBuffer(t *testing.T) {
+	f := New("https://example.com/api/v1/telemetry")
+	if err := f.Flush(); err != nil {
+		t.Errorf("Flush on empty buffer should return nil, got %v", err)
+	}
+}
+
+func TestFlush_WithBufferedEvents(t *testing.T) {
+	var receiveCount int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&receiveCount, 1)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	f := New(srv.URL + "/api/v1/telemetry")
+
+	// Manually add events to the buffer
+	f.mu.Lock()
+	f.buf = []contracts.Event{
+		{ID: "test-1", Source: contracts.SourceScanner, Artifact: "file1.go", TotalDetections: 1},
+		{ID: "test-2", Source: contracts.SourceScanner, Artifact: "file2.go", TotalDetections: 2},
+	}
+	f.mu.Unlock()
+
+	if err := f.Flush(); err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+	if atomic.LoadInt32(&receiveCount) != 1 {
+		t.Errorf("expected 1 request, got %d", atomic.LoadInt32(&receiveCount))
+	}
+
+	// Buffer should be cleared after flush
+	f.mu.Lock()
+	bufLen := len(f.buf)
+	f.mu.Unlock()
+	if bufLen != 0 {
+		t.Errorf("expected empty buffer after flush, got %d", bufLen)
+	}
+}
+
+func TestForwardFindings_AsyncSendsToPlatform(t *testing.T) {
+	var receivedBatch contracts.EventBatch
+	var receiveCount int32
+	done := make(chan struct{}, 1)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&receiveCount, 1)
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &receivedBatch)
+		w.WriteHeader(http.StatusAccepted)
+		select {
+		case done <- struct{}{}:
+		default:
+		}
+	}))
+	defer srv.Close()
+
+	f := New(srv.URL + "/api/v1/telemetry")
+	f.SetVersion("v0.4.0")
+
+	findings := []scanner.Finding{
+		makeFinding("secret_aws_key", "secrets", "critical", 42),
+	}
+	f.ForwardFindings("config.yaml", findings) // async
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for async forward")
+	}
+
+	if atomic.LoadInt32(&receiveCount) != 1 {
+		t.Errorf("expected 1 request, got %d", atomic.LoadInt32(&receiveCount))
+	}
+	if len(receivedBatch.Events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(receivedBatch.Events))
+	}
+	if receivedBatch.Events[0].Artifact != "config.yaml" {
+		t.Errorf("expected artifact 'config.yaml', got %q", receivedBatch.Events[0].Artifact)
+	}
+}
+
+func TestForwardFindings_DisabledNoFindings(t *testing.T) {
+	// When disabled, ForwardFindings should be a no-op
+	f := New("")
+	f.ForwardFindings("file.go", nil)
+	// Should not panic
+}
+
+func TestHeartbeat_HTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	f := New(srv.URL + "/api/v1/telemetry")
+	result := f.Heartbeat()
+	if result.Success {
+		t.Error("expected heartbeat failure for HTTP 500")
+	}
+	if result.Error == "" {
+		t.Error("expected non-empty error message")
+	}
+}
+
+func TestHeartbeat_ConnectionRefused(t *testing.T) {
+	f := New("http://127.0.0.1:1/api/v1/telemetry")
+	result := f.Heartbeat()
+	if result.Success {
+		t.Error("expected heartbeat failure for unreachable host")
+	}
+	if result.Error == "" {
+		t.Error("expected non-empty error message")
+	}
+}
+
+func TestStartHeartbeatLoop_CancelContext(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	f := New(srv.URL + "/api/v1/telemetry")
+	ctx, cancel := context.WithCancel(context.Background())
+	results := f.StartHeartbeatLoop(ctx, 50*time.Millisecond)
+
+	// Wait for at least one result
+	select {
+	case r, ok := <-results:
+		if !ok {
+			t.Fatal("results channel closed before receiving")
+		}
+		_ = r
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for heartbeat result")
+	}
+
+	// Cancel context — should close the channel
+	cancel()
+	select {
+	case _, ok := <-results:
+		if ok {
+			t.Error("expected channel to be closed after context cancellation")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for channel close after cancel")
+	}
+}
+
+func TestForwardBatch_DisabledNoop(t *testing.T) {
+	f := New("")
+	err := f.ForwardBatch(contracts.EventBatch{})
+	if err != nil {
+		t.Errorf("expected nil error when disabled, got %v", err)
+	}
+}
+
+func TestForwardFindingsSync_DisabledNoop(t *testing.T) {
+	f := New("")
+	err := f.ForwardFindingsSync("file.go", []scanner.Finding{makeFinding("test", "secrets", "high", 1)})
+	if err != nil {
+		t.Errorf("expected nil error when disabled, got %v", err)
+	}
+}
+
+func TestForwardFindingsSync_NoFindings(t *testing.T) {
+	f := New("https://example.com/api/v1/telemetry")
+	err := f.ForwardFindingsSync("file.go", nil)
+	if err != nil {
+		t.Errorf("expected nil error for no findings, got %v", err)
+	}
+}
+
+func TestMaskURL_Invalid(t *testing.T) {
+	result := maskURL("://invalid-url")
+	if result != "[invalid-url]" {
+		t.Errorf("expected '[invalid-url]', got %q", result)
+	}
+}
+
+func TestHealthzURL_Invalid(t *testing.T) {
+	result := healthzURL("://invalid")
+	// Should return the input as-is when parsing fails
+	if result == "" {
+		t.Error("expected non-empty result for invalid URL")
+	}
 }
