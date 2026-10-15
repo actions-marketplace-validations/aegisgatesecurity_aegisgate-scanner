@@ -37,9 +37,9 @@
 # =========================================================================
 
 # ---------------------------------------------------------------------------
-# Builder stage: Go 1.26.9 on Debian bookworm.
+# Builder stage: Go 1.27.2 on Debian bookworm.
 # ---------------------------------------------------------------------------
-FROM golang:1.27.0-bookworm AS builder
+FROM golang:1.27.2-bookworm AS builder
 
 # Install C compiler + libc headers for CGO-based ONNX Runtime bindings.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -56,7 +56,7 @@ COPY . .
 
 # Build arguments (overridable via --build-arg).
 ARG CGO_ENABLED=1
-ARG VERSION=0.1.0
+ARG VERSION=0.4.0
 ARG TARGETARCH
 
 # CGO / ONNX Runtime environment.
@@ -126,14 +126,14 @@ ENTRYPOINT ["/entrypoint.sh"]
 # ---------------------------------------------------------------------------
 # Builder stage (lite): CGO_ENABLED=0 for pure static binary.
 # ---------------------------------------------------------------------------
-FROM golang:1.27.0-bookworm AS builder-lite
+FROM golang:1.27.2-bookworm AS builder-lite
 
 WORKDIR /build
 
 COPY go.mod ./
 COPY . .
 
-ARG VERSION=0.1.0
+ARG VERSION=0.4.0
 
 ENV CGO_ENABLED=0
 
