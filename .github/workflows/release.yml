@@ -229,6 +229,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=sha,prefix=
+            type=raw,value=${{ steps.version.outputs.VERSION }}
             type=raw,value=latest,enable={{is_default_branch}}
       - name: Build and push (multi-arch)
         id: docker_build
@@ -248,15 +249,17 @@ jobs:
       - name: Sign container image
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
+          DIGEST: ${{ steps.docker_build.outputs.digest }}
         run: |
-          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${DIGEST}"
           echo "Signing image: ${IMAGE_REF}"
           cosign sign --yes "${IMAGE_REF}"
       - name: Verify container signature
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
+          DIGEST: ${{ steps.docker_build.outputs.digest }}
         run: |
-          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${DIGEST}"
           cosign verify \
             --certificate-identity-regexp "https://github.com/.*" \
             --certificate-oidc-issuer-regexp "https://token.actions.githubusercontent.com" \
