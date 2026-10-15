@@ -119,7 +119,6 @@ jobs:
 
       - name: Update go.mod replace for CI
         run: go mod edit -replace github.com/aegisgatesecurity/aegisgate-platform=./aegisgate-platform -replace github.com/aegisgatesecurity/aegisgate-scanner=.
-      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
