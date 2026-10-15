@@ -238,7 +238,7 @@ The AegisGate Scanner was subjected to a comprehensive testing program covering 
 
 | Category | Grade | Notes |
 |----------|-------|-------|
-| ReDoS Resistance | A | 268 patterns, 0 vulnerable |
+| ReDoS Resistance | A | 322 patterns, 0 vulnerable |
 | Archive Security | A | Path traversal, zip bombs, symlinks all blocked |
 | Input Handling | A | Null bytes, control chars, invalid UTF-8 all safe |
 | Output Safety | A | HTML escaped, JSON valid, no injection |

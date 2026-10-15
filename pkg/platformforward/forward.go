@@ -21,7 +21,7 @@ import (
 )
 
 // defaultVersion is used if no version is explicitly set.
-const defaultVersion = "0.3.0"
+const defaultVersion = "0.4.0"
 
 // Forwarder pushes scan detection metadata to AegisGate Platform.
 //

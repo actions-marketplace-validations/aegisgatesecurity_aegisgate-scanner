@@ -31,7 +31,7 @@ Your input directly shapes our default extension list and ignore patterns. Drop 
 
 **Body:**
 
-Scanner currently has 268 detection patterns across 9 categories:
+Scanner currently has 322 detection patterns across 12 categories:
 
 | Category | Count |
 |----------|-------|
