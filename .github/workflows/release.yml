@@ -350,12 +350,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Download binary artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release/
           pattern: scanner-*
       - name: Download SBOM artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release/
           name: sbom-files
