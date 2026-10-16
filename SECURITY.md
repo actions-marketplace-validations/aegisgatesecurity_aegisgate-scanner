@@ -61,3 +61,15 @@ AegisGate Scanner includes built-in security measures:
 
 Responsible disclosure reporters will be credited here (with permission)
 after the vulnerability is fixed.
+
+### Community Contributions
+
+We thank the following community members for thought-sharing, pattern
+suggestions, and security insights that have improved AegisGate Scanner:
+
+- **[@redbotster](https://github.com/redbotster)** (1claw) — Field-validated
+  pattern suggestions for indirect prompt injection via tool outputs,
+  token smuggling with zero-width unicode, short-lived credential formats,
+  and agent sandbox escape vectors (path traversal, sensitive file access).
+  These contributions directly informed the path traversal and sensitive
+  file access detection patterns added in v0.5.0. See [Discussion #8](https://github.com/aegisgatesecurity/aegisgate-scanner/discussions/8).

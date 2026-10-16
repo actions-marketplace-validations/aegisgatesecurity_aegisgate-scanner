@@ -49,7 +49,7 @@ CLI → Walker → Classifier → Regex Detector → ML Detector → Output Form
 | Walker           | `pkg/artifacts/walker.go`      | Traverse filesystem, respect `.gitignore`, stream file contents |
 | Archive Extract  | `pkg/artifacts/archive.go`     | Decompress `.zip`, `.tar.gz`, `.tar.bz2` into temp dir with size/file limits |
 | Classifier       | `pkg/artifacts/walker.go`      | Classify each file as `rag-document`, `training-data`, `model-config`, `agent-skill`, or `generic` |
-| Regex Detector   | `internal/detectors/engine.go` | Pattern-match secrets, PII, XSS, compliance, dangerous functions, OT/ICS |
+| Regex Detector   | `pkg/detectors/engine.go` | Pattern-match secrets, PII, XSS, compliance, dangerous functions, OT/ICS |
 | ML Detector      | `internal/ml/detector.go`      | CharCNN-BiLSTM inference for prompt injection (ONNX runtime) |
 | Output Formatter | `pkg/output`                   | Emit findings as text, JSON, SARIF, HTML, SBOM, or PR annotation |
 
@@ -77,7 +77,7 @@ flowchart TB
 
         subgraph Detection["Detection Engine"]
             direction LR
-            RegexDet["Regex Detector\n268 patterns"]
+            RegexDet["Regex Detector\n322 patterns"]
             MLDet["ML Detector\nCharCNN-BiLSTM (ONNX)"]
         end
 
@@ -159,7 +159,7 @@ These are the threats Scanner is designed to detect in target artifacts.
 
 | ID | Threat | STRIDE | OWASP LLM | Severity | Detection |
 |----|--------|--------|-----------|----------|-----------|
-| S-001 | **Prompt injection in text artifacts** — adversarial instructions embedded in RAG docs or training data | Tampering | LLM01 | High | Regex detector (268 patterns) + ML detector (CharCNN-BiLSTM ONNX inference) |
+| S-001 | **Prompt injection in text artifacts** — adversarial instructions embedded in RAG docs or training data | Tampering | LLM01 | High | Regex detector (322 patterns) + ML detector (CharCNN-BiLSTM ONNX inference) |
 | S-002 | **Secrets in source/config files** — API keys, tokens, cloud credentials committed to repositories | Info Disclosure | LLM06 | Critical | Regex detector: 64 credential patterns (AWS, GCP, Azure, GitHub, Slack, etc.) |
 | S-003 | **PII in training data / RAG docs** — SSNs, phone numbers, email addresses, financial data | Info Disclosure | LLM06 | High | Regex detector: US core, US extended, financial, international PII patterns |
 | S-004 | **Dangerous functions in agent skills** — `eval()`, `exec()`, `os.system()`, `subprocess(shell=True)` in `.py`/`.ts`/`.js` | Elevation of Privilege | LLM02 | Critical | Regex detector: dangerous function pattern set |

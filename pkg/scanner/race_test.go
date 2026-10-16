@@ -20,8 +20,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/aegisgatesecurity/aegisgate-scanner/internal/detectors"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/artifacts"
+	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/detectors"
 )
 
 // TestRace_ConcurrentScanArtifact runs ScanArtifact from multiple

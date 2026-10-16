@@ -14,7 +14,7 @@ package scanner
 import (
 	"strings"
 
-	"github.com/aegisgatesecurity/aegisgate-scanner/internal/detectors"
+	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/detectors"
 )
 
 // getRemediation returns actionable remediation guidance for a finding

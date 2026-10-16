@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegisgatesecurity/aegisgate-scanner/internal/detectors"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/artifacts"
+	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/detectors"
 	"github.com/aegisgatesecurity/aegisgate-scanner/pkg/scanner"
 )
 

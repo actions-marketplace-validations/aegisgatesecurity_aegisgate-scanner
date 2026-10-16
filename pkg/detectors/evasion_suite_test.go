@@ -945,7 +945,7 @@ func newEvasionDetector() *evasionDetector {
 	// Resolve model path: env var > repo-relative > fallback
 	modelPath := os.Getenv("AEGISGATE_ML_MODEL_PATH")
 	if modelPath == "" {
-		// Try relative to repo root from internal/detectors → ../../models/
+		// Try relative to repo root from pkg/detectors → ../../models/
 		candidates := []string{
 			filepath.Join("..", "..", "models", "threat_cnn_bilstm.onnx"),
 			filepath.Join("models", "threat_cnn_bilstm.onnx"),

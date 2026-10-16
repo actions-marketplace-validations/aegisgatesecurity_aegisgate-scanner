@@ -46,9 +46,9 @@ if [ -z "$FILES" ]; then
     exit 0
 fi
 
-# Whitelist: files in internal/detectors/ contain known example/test values
+# Whitelist: files in pkg/detectors/ contain known example/test values
 # for detection testing. These are intentionally included.
-WHITELIST="internal/detectors/examples.go internal/detectors/examples_test.go internal/detectors/entropy.go internal/detectors/entropy_test.go"
+WHITELIST="pkg/detectors/examples.go pkg/detectors/examples_test.go pkg/detectors/entropy.go pkg/detectors/entropy_test.go"
 
 # Filter out whitelisted files
 FILTERED=""

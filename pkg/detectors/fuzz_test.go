@@ -9,9 +9,9 @@
 //
 // Run with:
 //
-//	go test -fuzz=FuzzDetectAll -fuzztime=30s ./internal/detectors/
-//	go test -fuzz=FuzzDetectAllWithResults -fuzztime=30s ./internal/detectors/
-//	go test -fuzz=FuzzRegisterCustomPatterns -fuzztime=30s ./internal/detectors/
+//	go test -fuzz=FuzzDetectAll -fuzztime=30s ./pkg/detectors/
+//	go test -fuzz=FuzzDetectAllWithResults -fuzztime=30s ./pkg/detectors/
+//	go test -fuzz=FuzzRegisterCustomPatterns -fuzztime=30s ./pkg/detectors/
 //
 // =========================================================================
 
