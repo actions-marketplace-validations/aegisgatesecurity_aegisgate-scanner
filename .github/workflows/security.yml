@@ -24,9 +24,9 @@ jobs:
   govulncheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -55,9 +55,9 @@ jobs:
   gosec:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -88,7 +88,7 @@ jobs:
   trivy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -146,7 +146,7 @@ jobs:
   gitleaks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
       - name: Install Gitleaks
@@ -172,7 +172,7 @@ jobs:
   trufflehog:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
       - name: TruffleHog
@@ -187,7 +187,7 @@ jobs:
     name: "OPSEC scan"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Run OPSEC scan
         run: |
           chmod +x tools/opsec-scan.sh
@@ -199,9 +199,9 @@ jobs:
   standard-tools:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -231,7 +231,7 @@ jobs:
     needs: [govulncheck, gosec]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Generate CycloneDX SBOM
         uses: anchore/sbom-action@v0.24.3
         with:

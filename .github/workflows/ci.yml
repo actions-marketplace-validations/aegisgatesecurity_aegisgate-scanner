@@ -21,11 +21,11 @@ jobs:
     name: DCO Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -89,9 +89,9 @@ jobs:
     needs: dco
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -127,9 +127,9 @@ jobs:
     name: Test (non-CGO / heuristic-only)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -195,9 +195,9 @@ jobs:
     name: Test (CGO / ML-enabled)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -269,9 +269,9 @@ jobs:
     name: Race Detector
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -309,9 +309,9 @@ jobs:
     name: Benchmark Regression Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -359,9 +359,9 @@ jobs:
       matrix:
         cgo: [0, 1]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
@@ -423,9 +423,9 @@ jobs:
     name: Docker Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Checkout Platform (for go.mod replace)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           repository: aegisgatesecurity/aegisgate-platform
           path: ./aegisgate-platform
